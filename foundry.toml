@@ -10,6 +10,7 @@ out = "out"
 solc = "0.8.16"
 src = "src"
 test = "test"
+fs_permissions = [{ access = "read", path = "./out/" }]
 
 [profile.ci]
 fuzz_runs = 1_000

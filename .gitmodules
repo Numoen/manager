@@ -11,6 +11,3 @@
 [submodule "lib/core"]
 	path = lib/core
 	url = https://github.com/numoen/core
-[submodule "lib/v2-periphery"]
-	path = lib/v2-periphery
-	url = https://github.com/uniswap/v2-periphery
