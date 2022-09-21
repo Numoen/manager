@@ -23,7 +23,7 @@ contract Router is IMintCallback {
     address private immutable factory;
     address private immutable uniFactory;
 
-    uint256 public constant maxSlippageBps = 1000;
+    uint256 public constant maxSlippageBps = 2000;
 
     constructor(address _factory, address _uniFactory) {
         factory = _factory;
@@ -36,6 +36,7 @@ contract Router is IMintCallback {
         address user;
     }
 
+    /// @param amount how many tokens are owed in total
     function MintCallback(uint256 amount, bytes calldata data) external override {
         MintCallbackData memory decoded = abi.decode(data, (MintCallbackData));
 
@@ -43,8 +44,6 @@ contract Router is IMintCallback {
         address pair = Lendgine(msg.sender).pair();
         SafeTransferLib.safeTransfer(ERC20(pair), pair, Pair(pair).balanceOf(address(this)));
         Pair(pair).burn(address(this));
-
-        console2.log(2);
 
         // swap for speculative
         uint256 swapAmount = ERC20(decoded.key.token1).balanceOf(address(this));
@@ -56,8 +55,6 @@ contract Router is IMintCallback {
         );
         uint256 amountOut = UniswapV2Library.getAmountOut(swapAmount, reserveIn, reserveOut);
 
-        console2.log(3);
-
         address uniPair = IUniswapV2Factory(uniFactory).getPair(decoded.key.token0, decoded.key.token1);
         bool zeroForOne = decoded.key.token0 < decoded.key.token1;
         SafeTransferLib.safeTransfer(
@@ -66,20 +63,22 @@ contract Router is IMintCallback {
             ERC20(decoded.key.token1).balanceOf(address(this))
         );
         IUniswapV2Pair(uniPair).swap(zeroForOne ? 0 : amountOut, zeroForOne ? amountOut : 0, msg.sender, new bytes(0));
-        console2.log(decoded.userAmount, amountOut, ERC20(decoded.key.token0).balanceOf(address(this)));
-        console2.log(decoded.userAmount + amountOut + ERC20(decoded.key.token0).balanceOf(address(this)));
         SafeTransferLib.safeTransfer(
             ERC20(decoded.key.token0),
             msg.sender,
             ERC20(decoded.key.token0).balanceOf(address(this))
         );
 
-        console2.log(ERC20(decoded.key.token0).balanceOf(address(decoded.user)));
+        uint256 fromLP = amountOut + ERC20(decoded.key.token0).balanceOf(address(this));
+        console2.log("from LP", fromLP);
 
-        console2.log(amount);
+        uint256 userOwed = amount - fromLP;
+        console2.log("user owed", userOwed);
+
+        if (decoded.userAmount < userOwed) revert();
 
         // transfer the user funds to the lendgine
-        SafeTransferLib.safeTransferFrom(ERC20(decoded.key.token0), decoded.user, msg.sender, decoded.userAmount);
+        SafeTransferLib.safeTransferFrom(ERC20(decoded.key.token0), decoded.user, msg.sender, userOwed);
     }
 
     /// @dev for now only can pay with speculative tokens
@@ -115,12 +114,12 @@ contract Router is IMintCallback {
             upperBound
         );
 
-        console2.log(1);
-
         Lendgine(lendgine).mint(
             address(this),
             borrowAmount + slippageAdjustedAmount,
-            abi.encode(MintCallbackData({ key: key, userAmount: slippageAdjustedAmount, user: msg.sender }))
+            abi.encode(MintCallbackData({ key: key, userAmount: amount, user: msg.sender }))
         );
+
+        Lendgine(lendgine).transfer(msg.sender, Lendgine(lendgine).balanceOf(address(this)));
     }
 }
