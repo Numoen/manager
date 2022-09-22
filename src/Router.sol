@@ -136,7 +136,6 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         LPCallbackData memory decoded = abi.decode(data, (LPCallbackData));
         address pair = Lendgine(msg.sender).pair();
         address uniPair = IUniswapV2Factory(uniFactory).getPair(decoded.key.token0, decoded.key.token1);
-        console2.log(2);
 
         // figure out what we need to get amountLP
         uint256 amountSpec;
@@ -148,7 +147,6 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
             amountSpec = (amountLP * pairBalance0) / pairTotalSupply;
             amountBase = (amountLP * pairBalance1) / pairTotalSupply;
         }
-        console2.log(3);
         // swap
         (uint256 reserveIn, uint256 reserveOut) = UniswapV2Library.getReserves(
             uniFactory,
@@ -157,16 +155,13 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         );
         uint256 amountIn = UniswapV2Library.getAmountIn(amountBase, reserveIn, reserveOut);
         bool zeroForOne = decoded.key.token0 < decoded.key.token1;
-        console2.log(4);
-        console2.log(ERC20(decoded.key.token0).balanceOf(address(this)));
 
-        SafeTransferLib.safeTransfer(ERC20(decoded.key.token0), uniPair, amountIn);
-        console2.log(5);
+        SafeTransferLib.safeTransfer(ERC20(zeroForOne ? decoded.key.token0 : decoded.key.token1), uniPair, amountIn);
 
         IUniswapV2Pair(uniPair).swap(
-            zeroForOne ? amountBase : 0,
             zeroForOne ? 0 : amountBase,
-            msg.sender,
+            zeroForOne ? amountBase : 0,
+            address(this),
             new bytes(0)
         );
 
@@ -221,8 +216,7 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         );
 
         SafeTransferLib.safeTransferFrom(ERC20(lendgine), msg.sender, lendgine, amount);
-        console2.log(1);
 
-        Lendgine(lendgine).burn(msg.sender, abi.encode(LPCallbackData({ key: key, user: msg.sender })));
+        Lendgine(lendgine).burn(address(this), abi.encode(LPCallbackData({ key: key, user: msg.sender })));
     }
 }

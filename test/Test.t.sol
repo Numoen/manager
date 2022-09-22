@@ -57,13 +57,18 @@ contract Test is TestHelper {
         _mintMaker(1 ether, 1 ether, cuh);
         _mint(1 ether, cuh);
 
-        console2.log(lendgine.balanceOf(cuh));
-
         vm.prank(cuh);
         lendgine.approve(address(router), 0.1 ether);
 
         vm.prank(cuh);
         router.burn(0.1 ether, address(speculative), address(base), upperBound);
+
+        assertEq(lendgine.balanceOf(cuh), 0);
+        console2.log("user spec balance:", speculative.balanceOf(cuh));
+
+        // check router balances
+        assertEq(lendgine.balanceOf(address(router)), 0);
+        assertEq(speculative.balanceOf(address(router)), 0);
     }
 
     // test max slippage
