@@ -23,7 +23,7 @@ contract Router is IMintCallback {
     address private immutable factory;
     address private immutable uniFactory;
 
-    uint256 public constant maxSlippageBps = 2000;
+    uint256 public constant maxSlippageBps = 600;
 
     constructor(address _factory, address _uniFactory) {
         factory = _factory;
@@ -39,6 +39,8 @@ contract Router is IMintCallback {
     /// @param amount how many tokens are owed in total
     function MintCallback(uint256 amount, bytes calldata data) external override {
         MintCallbackData memory decoded = abi.decode(data, (MintCallbackData));
+
+        console2.log("callback amount", amount);
 
         // withdraw lp
         address pair = Lendgine(msg.sender).pair();
@@ -57,12 +59,16 @@ contract Router is IMintCallback {
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(decoded.key.token0, decoded.key.token1);
         bool zeroForOne = decoded.key.token0 < decoded.key.token1;
+
+        // swap and send output to lendgine
         SafeTransferLib.safeTransfer(
             ERC20(decoded.key.token1),
             uniPair,
             ERC20(decoded.key.token1).balanceOf(address(this))
         );
         IUniswapV2Pair(uniPair).swap(zeroForOne ? 0 : amountOut, zeroForOne ? amountOut : 0, msg.sender, new bytes(0));
+
+        // transfer tokens from lp
         SafeTransferLib.safeTransfer(
             ERC20(decoded.key.token0),
             msg.sender,
@@ -108,6 +114,14 @@ contract Router is IMintCallback {
             borrowAmount = (slippageAdjustedAmount * 1 ether) / denom;
         }
 
+        console2.log("borrow amount", borrowAmount);
+        console2.log("slippage adjusted", slippageAdjustedAmount);
+        unchecked {
+            uint256 sum = borrowAmount + slippageAdjustedAmount;
+            console2.log(sum);
+        }
+        console2.log("sum", borrowAmount + slippageAdjustedAmount);
+
         LendgineAddress.LendgineKey memory key = LendgineAddress.getLendgineKey(
             address(speculative),
             address(base),
@@ -116,7 +130,7 @@ contract Router is IMintCallback {
 
         Lendgine(lendgine).mint(
             address(this),
-            borrowAmount + slippageAdjustedAmount,
+            (borrowAmount + slippageAdjustedAmount),
             abi.encode(MintCallbackData({ key: key, userAmount: amount, user: msg.sender }))
         );
 
