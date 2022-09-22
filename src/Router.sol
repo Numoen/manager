@@ -6,6 +6,8 @@ import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
+import { ILPCallback } from "numoen-core/interfaces/ILPCallback.sol";
+import { IPairMintCallback } from "numoen-core/interfaces/IPairMintCallback.sol";
 import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { IUniswapV2Pair } from "v2-core/interfaces/IUniswapV2Pair.sol";
@@ -19,7 +21,7 @@ import { ERC20 } from "solmate/tokens/ERC20.sol";
 
 import "forge-std/console2.sol";
 
-contract Router is IMintCallback {
+contract Router is IMintCallback, ILPCallback, IPairMintCallback {
     address private immutable factory;
     address private immutable uniFactory;
 
@@ -39,8 +41,6 @@ contract Router is IMintCallback {
     /// @param amount how many tokens are owed in total
     function MintCallback(uint256 amount, bytes calldata data) external override {
         MintCallbackData memory decoded = abi.decode(data, (MintCallbackData));
-
-        console2.log("callback amount", amount);
 
         // withdraw lp
         address pair = Lendgine(msg.sender).pair();
@@ -76,10 +76,8 @@ contract Router is IMintCallback {
         );
 
         uint256 fromLP = amountOut + ERC20(decoded.key.token0).balanceOf(address(this));
-        console2.log("from LP", fromLP);
 
         uint256 userOwed = amount - fromLP;
-        console2.log("user owed", userOwed);
 
         if (decoded.userAmount < userOwed) revert();
 
@@ -114,14 +112,6 @@ contract Router is IMintCallback {
             borrowAmount = (slippageAdjustedAmount * 1 ether) / denom;
         }
 
-        console2.log("borrow amount", borrowAmount);
-        console2.log("slippage adjusted", slippageAdjustedAmount);
-        unchecked {
-            uint256 sum = borrowAmount + slippageAdjustedAmount;
-            console2.log(sum);
-        }
-        console2.log("sum", borrowAmount + slippageAdjustedAmount);
-
         LendgineAddress.LendgineKey memory key = LendgineAddress.getLendgineKey(
             address(speculative),
             address(base),
@@ -135,5 +125,104 @@ contract Router is IMintCallback {
         );
 
         Lendgine(lendgine).transfer(msg.sender, Lendgine(lendgine).balanceOf(address(this)));
+    }
+
+    struct LPCallbackData {
+        LendgineAddress.LendgineKey key;
+        address user;
+    }
+
+    function LPCallback(uint256 amountLP, bytes calldata data) external override {
+        LPCallbackData memory decoded = abi.decode(data, (LPCallbackData));
+        address pair = Lendgine(msg.sender).pair();
+        address uniPair = IUniswapV2Factory(uniFactory).getPair(decoded.key.token0, decoded.key.token1);
+        console2.log(2);
+
+        // figure out what we need to get amountLP
+        uint256 amountSpec;
+        uint256 amountBase;
+        {
+            (uint256 pairBalance0, uint256 pairBalance1) = Pair(pair).balances();
+            uint256 pairTotalSupply = Pair(pair).totalSupply();
+
+            amountSpec = (amountLP * pairBalance0) / pairTotalSupply;
+            amountBase = (amountLP * pairBalance1) / pairTotalSupply;
+        }
+        console2.log(3);
+        // swap
+        (uint256 reserveIn, uint256 reserveOut) = UniswapV2Library.getReserves(
+            uniFactory,
+            decoded.key.token1,
+            decoded.key.token0
+        );
+        uint256 amountIn = UniswapV2Library.getAmountIn(amountBase, reserveIn, reserveOut);
+        bool zeroForOne = decoded.key.token0 < decoded.key.token1;
+        console2.log(4);
+        console2.log(ERC20(decoded.key.token0).balanceOf(address(this)));
+
+        SafeTransferLib.safeTransfer(ERC20(decoded.key.token0), uniPair, amountIn);
+        console2.log(5);
+
+        IUniswapV2Pair(uniPair).swap(
+            zeroForOne ? amountBase : 0,
+            zeroForOne ? 0 : amountBase,
+            msg.sender,
+            new bytes(0)
+        );
+
+        // deposit LP
+        Pair(pair).mint(amountSpec, amountBase, msg.sender, abi.encode(PairMintCallbackData({ key: decoded.key })));
+
+        // send remaining speculative to user
+        SafeTransferLib.safeTransfer(
+            ERC20(decoded.key.token0),
+            decoded.user,
+            ERC20(decoded.key.token0).balanceOf(address(this))
+        );
+    }
+
+    struct PairMintCallbackData {
+        LendgineAddress.LendgineKey key;
+    }
+
+    function PairMintCallback(
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata data
+    ) external override {
+        PairMintCallbackData memory decoded = abi.decode(data, (PairMintCallbackData));
+
+        SafeTransferLib.safeTransfer(
+            ERC20(decoded.key.token0 < decoded.key.token1 ? decoded.key.token0 : decoded.key.token1),
+            msg.sender,
+            amount0
+        );
+
+        SafeTransferLib.safeTransfer(
+            ERC20(decoded.key.token0 < decoded.key.token1 ? decoded.key.token1 : decoded.key.token0),
+            msg.sender,
+            amount1
+        );
+    }
+
+    function burn(
+        uint256 amount,
+        address speculative,
+        address base,
+        uint256 upperBound
+    ) public {
+        address lendgine = Factory(factory).getLendgine(speculative, base, upperBound);
+        // address pair = Lendgine(lendgine).pair();
+
+        LendgineAddress.LendgineKey memory key = LendgineAddress.getLendgineKey(
+            address(speculative),
+            address(base),
+            upperBound
+        );
+
+        SafeTransferLib.safeTransferFrom(ERC20(lendgine), msg.sender, lendgine, amount);
+        console2.log(1);
+
+        Lendgine(lendgine).burn(msg.sender, abi.encode(LPCallbackData({ key: key, user: msg.sender })));
     }
 }

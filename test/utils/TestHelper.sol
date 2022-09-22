@@ -127,4 +127,15 @@ abstract contract TestHelper is Test, CallbackHelper {
 
         lendgine.mintMaker(spender, liquidity, abi.encode(CallbackHelper.CallbackData({ key: key, payer: spender })));
     }
+
+    function _mint(uint256 amount, address spender) public {
+        speculative.mint(spender, amount);
+
+        if (spender != address(this)) {
+            vm.prank(spender);
+            speculative.approve(address(this), amount);
+        }
+
+        lendgine.mint(spender, amount, abi.encode(CallbackHelper.CallbackData({ key: key, payer: spender })));
+    }
 }

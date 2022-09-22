@@ -2,6 +2,7 @@ pragma solidity ^0.8.4;
 
 import { ILPCallback } from "numoen-core/interfaces/ILPCallback.sol";
 import { IPairMintCallback } from "numoen-core/interfaces/IPairMintCallback.sol";
+import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 
 import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
@@ -10,7 +11,7 @@ import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol";
 import "forge-std/console2.sol";
 
-abstract contract CallbackHelper is IPairMintCallback, ILPCallback {
+abstract contract CallbackHelper is IPairMintCallback, ILPCallback, IMintCallback {
     struct CallbackData {
         LendgineAddress.LendgineKey key;
         address payer;
@@ -22,6 +23,13 @@ abstract contract CallbackHelper is IPairMintCallback, ILPCallback {
         address pair = Lendgine(msg.sender).pair();
 
         if (amountLP > 0) pay(ERC20(pair), decoded.payer, msg.sender, amountLP);
+    }
+
+    function MintCallback(uint256 amount, bytes calldata data) external override {
+        CallbackData memory decoded = abi.decode(data, (CallbackData));
+        // CallbackValidation.verifyCallback(factory, decoded.poolKey);
+
+        if (amount > 0) pay(ERC20(decoded.key.token0), decoded.payer, msg.sender, amount);
     }
 
     function PairMintCallback(
