@@ -69,6 +69,21 @@ contract Test is TestHelper {
         // check router balances
         assertEq(lendgine.balanceOf(address(router)), 0);
         assertEq(speculative.balanceOf(address(router)), 0);
+        // cusd: 0.6, celo: 8.4
+    }
+
+    function testMintRouter() public {
+        speculative.mint(cuh, 0.1 ether);
+        base.mint(cuh, 0.1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(mintRouter), 0.1 ether);
+
+        vm.prank(cuh);
+        base.approve(address(mintRouter), 0.1 ether);
+
+        vm.prank(cuh);
+        mintRouter.mintMaker(0.1 ether, 0.1 ether, address(speculative), address(base), upperBound);
     }
 
     // test max slippage

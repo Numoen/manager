@@ -1,6 +1,7 @@
 pragma solidity ^0.8.4;
 
 import { Router } from "../../src/Router.sol";
+import { MintRouter } from "../../src/MintRouter.sol";
 
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
@@ -37,6 +38,8 @@ abstract contract TestHelper is Test, CallbackHelper {
     IUniswapV2Factory public uniFactory;
 
     Router public router;
+
+    MintRouter public mintRouter;
 
     uint256 public ethFork;
 
@@ -79,6 +82,8 @@ abstract contract TestHelper is Test, CallbackHelper {
         pair = Pair(_pair);
 
         router = new Router(address(factory), address(uniFactory));
+
+        mintRouter = new MintRouter(address(factory));
     }
 
     function _mintUni(

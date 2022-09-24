@@ -91,7 +91,7 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         address speculative,
         address base,
         uint256 upperBound
-    ) public {
+    ) external {
         address lendgine = Factory(factory).getLendgine(speculative, base, upperBound);
         address pair = Lendgine(lendgine).pair();
 
@@ -166,7 +166,12 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         );
 
         // deposit LP
-        Pair(pair).mint(amountSpec, amountBase, msg.sender, abi.encode(PairMintCallbackData({ key: decoded.key })));
+        Pair(pair).mint(
+            amountSpec,
+            amountBase,
+            msg.sender,
+            abi.encode(PairMintCallbackData({ key: decoded.key, payer: address(this) }))
+        );
 
         // send remaining speculative to user
         SafeTransferLib.safeTransfer(
@@ -178,6 +183,7 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
 
     struct PairMintCallbackData {
         LendgineAddress.LendgineKey key;
+        address payer;
     }
 
     function PairMintCallback(
@@ -187,14 +193,16 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
     ) external override {
         PairMintCallbackData memory decoded = abi.decode(data, (PairMintCallbackData));
 
-        SafeTransferLib.safeTransfer(
+        pay(
             ERC20(decoded.key.token0 < decoded.key.token1 ? decoded.key.token0 : decoded.key.token1),
+            decoded.payer,
             msg.sender,
             amount0
         );
 
-        SafeTransferLib.safeTransfer(
+        pay(
             ERC20(decoded.key.token0 < decoded.key.token1 ? decoded.key.token1 : decoded.key.token0),
+            decoded.payer,
             msg.sender,
             amount1
         );
@@ -205,7 +213,7 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         address speculative,
         address base,
         uint256 upperBound
-    ) public {
+    ) external {
         address lendgine = Factory(factory).getLendgine(speculative, base, upperBound);
         // address pair = Lendgine(lendgine).pair();
 
@@ -218,5 +226,29 @@ contract Router is IMintCallback, ILPCallback, IPairMintCallback {
         SafeTransferLib.safeTransferFrom(ERC20(lendgine), msg.sender, lendgine, amount);
 
         Lendgine(lendgine).burn(address(this), abi.encode(LPCallbackData({ key: key, user: msg.sender })));
+    }
+
+    /// @param token The token to pay
+    /// @param payer The entity that must pay
+    /// @param recipient The entity that will receive payment
+    /// @param value The amount to pay
+    function pay(
+        ERC20 token,
+        address payer,
+        address recipient,
+        uint256 value
+    ) internal {
+        // if (token == WETH9 && address(this).balance >= value) {
+        //     // pay with WETH9
+        //     IWETH9(WETH9).deposit{ value: value }(); // wrap only what is needed to pay
+        //     IWETH9(WETH9).transfer(recipient, value);
+        // } else
+        if (payer == address(this)) {
+            // pay with tokens already in the contract (for the exact input multihop case)
+            SafeTransferLib.safeTransfer(token, recipient, value);
+        } else {
+            // pull payment
+            SafeTransferLib.safeTransferFrom(token, payer, recipient, value);
+        }
     }
 }
