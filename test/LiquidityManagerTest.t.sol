@@ -60,7 +60,7 @@ contract LiquidityManagerTest is Test {
         liquidityManager = new LiquidityManager(address(factory));
     }
 
-    function testMinBasic() public {
+    function testMintBasic() public {
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 1 ether);
 
@@ -108,7 +108,7 @@ contract LiquidityManagerTest is Test {
         assertEq(_tokensOwed, 0);
     }
 
-    function testMinLiquidity() public {
+    function testMintLiquidity() public {
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 1 ether);
 
@@ -156,8 +156,6 @@ contract LiquidityManagerTest is Test {
     }
 
     // test double mint
-
-    // test increase liquidity
 
     function testIncreaseBasic() public {
         base.mint(cuh, 1 ether);

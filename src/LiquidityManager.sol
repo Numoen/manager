@@ -262,7 +262,17 @@ contract LiquidityManager is IPairMintCallback {
         emit DecreaseLiquidity(params.tokenID, liquidity, params.amount0, params.amount1);
     }
 
-    function collect() external {}
+    struct CollectParams {
+        uint256 tokenID;
+        address recipient;
+        uint128 amountMax;
+    }
+
+    function collect(CollectParams calldata params) external returns (uint256 amount) {
+        Position storage position = _positions[params.tokenID];
+
+        if (msg.sender != position.operator) revert UnauthorizedError();
+    }
 
     /*//////////////////////////////////////////////////////////////
                             INTERNAL LOGIC
