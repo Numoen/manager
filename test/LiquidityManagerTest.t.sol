@@ -26,7 +26,7 @@ contract LiquidityManagerTest is Test {
     Pair public pair;
 
     LendgineAddress.LendgineKey public key;
-    uint256 k;
+    uint256 public k;
 
     LiquidityManager public liquidityManager;
 
@@ -156,4 +156,132 @@ contract LiquidityManagerTest is Test {
     }
 
     // test double mint
+
+    // test increase liquidity
+
+    function testIncreaseBasic() public {
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 1 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        (uint256 tokenID, uint256 liquidity) = liquidityManager.mint(
+            LiquidityManager.MintParams({
+                base: address(base),
+                speculative: address(speculative),
+                upperBound: upperBound,
+                tick: 1,
+                amount0: 1 ether,
+                amount1: 1 ether,
+                liquidityMin: k,
+                recipient: cuh,
+                deadline: 2
+            })
+        );
+
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 1 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        (liquidity) = liquidityManager.increaseLiquidity(
+            LiquidityManager.IncreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0: 1 ether,
+                amount1: 1 ether,
+                liquidityMin: k,
+                deadline: 2
+            })
+        );
+
+        (
+            address _operator,
+            address _base,
+            address _speculative,
+            uint256 _upperBound,
+            uint24 _tick,
+            uint256 _liquidity,
+            uint256 _rewardPerLiquidityPaid,
+            uint256 _tokensOwed
+        ) = liquidityManager.getPosition(tokenID);
+
+        assertEq(_operator, cuh);
+        assertEq(address(base), _base);
+        assertEq(address(speculative), _speculative);
+        assertEq(upperBound, _upperBound);
+        assertEq(1, _tick);
+        assertEq(k, liquidity);
+        assertEq(_liquidity, 2 * k);
+        assertEq(_rewardPerLiquidityPaid, 0);
+        assertEq(_tokensOwed, 0);
+    }
+
+    function testDecreaseBasic() public {
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 1 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        (uint256 tokenID, uint256 liquidity) = liquidityManager.mint(
+            LiquidityManager.MintParams({
+                base: address(base),
+                speculative: address(speculative),
+                upperBound: upperBound,
+                tick: 1,
+                amount0: 1 ether,
+                amount1: 1 ether,
+                liquidityMin: k,
+                recipient: cuh,
+                deadline: 2
+            })
+        );
+
+        vm.prank(cuh);
+        (liquidity) = liquidityManager.decreaseLiquidity(
+            LiquidityManager.DecreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0: 1 ether,
+                amount1: 1 ether,
+                liquidityMax: k,
+                recipient: cuh,
+                deadline: 2
+            })
+        );
+
+        (
+            address _operator,
+            address _base,
+            address _speculative,
+            uint256 _upperBound,
+            uint24 _tick,
+            uint256 _liquidity,
+            uint256 _rewardPerLiquidityPaid,
+            uint256 _tokensOwed
+        ) = liquidityManager.getPosition(tokenID);
+
+        assertEq(_operator, cuh);
+        assertEq(address(base), _base);
+        assertEq(address(speculative), _speculative);
+        assertEq(upperBound, _upperBound);
+        assertEq(1, _tick);
+        assertEq(k, liquidity);
+        assertEq(_liquidity, 0);
+        assertEq(_rewardPerLiquidityPaid, 0);
+        assertEq(_tokensOwed, 0);
+    }
 }

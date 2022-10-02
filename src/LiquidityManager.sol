@@ -257,6 +257,8 @@ contract LiquidityManager is IPairMintCallback {
 
         Pair(_pair).burn(params.recipient, params.amount0, params.amount1);
 
+        position.liquidity -= liquidity;
+
         emit DecreaseLiquidity(params.tokenID, liquidity, params.amount0, params.amount1);
     }
 
