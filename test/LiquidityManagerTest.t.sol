@@ -8,11 +8,12 @@ import { Pair } from "numoen-core/Pair.sol";
 import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
+import { CallbackHelper } from "./utils/CallbackHelper.sol";
 
 import { Test } from "forge-std/Test.sol";
 import "forge-std/console2.sol";
 
-contract LiquidityManagerTest is Test {
+contract LiquidityManagerTest is Test, CallbackHelper {
     MockERC20 public immutable base;
     MockERC20 public immutable speculative;
 
@@ -280,6 +281,73 @@ contract LiquidityManagerTest is Test {
         assertEq(k, liquidity);
         assertEq(_liquidity, 0);
         assertEq(_rewardPerLiquidityPaid, 0);
+        assertEq(_tokensOwed, 0);
+    }
+
+    function testCollectBasic() public {
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 1 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        (uint256 tokenID, uint256 liquidity) = liquidityManager.mint(
+            LiquidityManager.MintParams({
+                base: address(base),
+                speculative: address(speculative),
+                upperBound: upperBound,
+                tick: 1,
+                amount0: 1 ether,
+                amount1: 1 ether,
+                liquidityMin: k,
+                recipient: cuh,
+                deadline: 2
+            })
+        );
+
+        speculative.mint(address(this), 1 ether);
+
+        lendgine.mint(
+            address(this),
+            1 ether,
+            abi.encode(CallbackHelper.CallbackData({ key: key, payer: address(this) }))
+        );
+
+        vm.warp(1 days + 1);
+
+        uint256 dilution = 10**35 / 10000;
+
+        vm.prank(cuh);
+        liquidityManager.collect(
+            LiquidityManager.CollectParams({ tokenID: tokenID, recipient: cuh, amountMax: (dilution * 10) / 1 ether })
+        );
+
+        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
+        assertEq(speculative.balanceOf(cuh), (dilution * 10) / 1 ether);
+
+        (
+            address _operator,
+            address _base,
+            address _speculative,
+            uint256 _upperBound,
+            uint24 _tick,
+            uint256 _liquidity,
+            uint256 _rewardPerLiquidityPaid,
+            uint256 _tokensOwed
+        ) = liquidityManager.getPosition(tokenID);
+
+        assertEq(_operator, cuh);
+        assertEq(address(base), _base);
+        assertEq(address(speculative), _speculative);
+        assertEq(upperBound, _upperBound);
+        assertEq(1, _tick);
+        assertEq(k, liquidity);
+        assertEq(_liquidity, k);
+        assertEq(_rewardPerLiquidityPaid, (dilution * 10 * 1 ether) / (k));
         assertEq(_tokensOwed, 0);
     }
 }

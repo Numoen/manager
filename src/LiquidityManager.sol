@@ -27,6 +27,8 @@ contract LiquidityManager is IPairMintCallback {
 
     event DecreaseLiquidity(uint256 indexed tokenID, uint256 liquidity, uint256 amount0, uint256 amount1);
 
+    event Collect(uint256 indexed tokenID, uint256 amount);
+
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -214,8 +216,14 @@ contract LiquidityManager is IPairMintCallback {
 
         Lendgine(lendgine).mintMaker(address(this), position.tick);
 
-        // TODO: update rewardPerLiquidityPaid
+        bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
 
+        position.tokensOwed +=
+            (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
+            (1 ether * 1 ether);
+
+        position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
         position.liquidity += liquidity;
 
         emit IncreaseLiquidity(params.tokenID, liquidity, params.amount0, params.amount1);
@@ -257,6 +265,15 @@ contract LiquidityManager is IPairMintCallback {
 
         Pair(_pair).burn(params.recipient, params.amount0, params.amount1);
 
+        bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
+
+        position.tokensOwed +=
+            (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
+            (1 ether * 1 ether);
+
+        position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
+
         position.liquidity -= liquidity;
 
         emit DecreaseLiquidity(params.tokenID, liquidity, params.amount0, params.amount1);
@@ -265,13 +282,43 @@ contract LiquidityManager is IPairMintCallback {
     struct CollectParams {
         uint256 tokenID;
         address recipient;
-        uint128 amountMax;
+        uint256 amountMax;
     }
 
     function collect(CollectParams calldata params) external returns (uint256 amount) {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
+
+        LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
+
+        address lendgine = LendgineAddress.computeAddress(
+            factory,
+            lendgineKey.base,
+            lendgineKey.speculative,
+            lendgineKey.upperBound
+        );
+
+        bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
+        Lendgine(lendgine).accrueMakerInterest(positionKey, position.tick);
+
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
+
+        position.tokensOwed +=
+            (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
+            (1 ether * 1 ether);
+
+        position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
+
+        Lendgine(lendgine).collectMaker(address(this), position.tick);
+
+        amount = position.tokensOwed > params.amountMax ? params.amountMax : position.tokensOwed;
+
+        SafeTransferLib.safeTransfer(ERC20(lendgineKey.speculative), params.recipient, amount);
+
+        position.tokensOwed -= amount;
+
+        emit Collect(params.tokenID, amount);
     }
 
     /*//////////////////////////////////////////////////////////////
