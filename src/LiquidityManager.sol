@@ -103,6 +103,7 @@ contract LiquidityManager is IPairMintCallback {
     ) external override {
         PairMintCallbackData memory decoded = abi.decode(data, (PairMintCallbackData));
         // TODO: verify sender
+        if (decoded.payer == address(this)) revert UnauthorizedError();
 
         if (amount0 > 0) pay(ERC20(decoded.key.base), decoded.payer, msg.sender, amount0);
         if (amount1 > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amount1);
@@ -114,13 +115,7 @@ contract LiquidityManager is IPairMintCallback {
         address recipient,
         uint256 value
     ) internal {
-        if (payer == address(this)) {
-            // pay with tokens already in the contract (for the exact input multihop case)
-            SafeTransferLib.safeTransfer(token, recipient, value);
-        } else {
-            // pull payment
-            SafeTransferLib.safeTransferFrom(token, payer, recipient, value);
-        }
+        SafeTransferLib.safeTransferFrom(token, payer, recipient, value);
     }
 
     /*//////////////////////////////////////////////////////////////
