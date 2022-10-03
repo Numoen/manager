@@ -56,9 +56,9 @@ contract LiquidityManagerTest is Test {
     )
         public
         returns (
-            address lendgine,
-            uint256 shares,
-            uint256 amountB
+            address _lendgine,
+            uint256 _shares,
+            uint256 _amountB
         )
     {
         speculative.mint(spender, amount);
@@ -67,7 +67,7 @@ contract LiquidityManagerTest is Test {
         speculative.approve(address(lendgineRouter), amount);
 
         vm.prank(spender);
-        (lendgine, shares, amountB) = lendgineRouter.mint(
+        (_lendgine, _shares, _amountB) = lendgineRouter.mint(
             LendgineRouter.MintParams({
                 base: address(base),
                 speculative: address(speculative),
