@@ -1,3 +1,3 @@
-# Lendgine
+# Manager
 
-Numoen Perpetual Lending Engine.
+Numoen Perpetual Lending Engine Manager.
