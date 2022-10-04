@@ -6,15 +6,6 @@ import { Lendgine } from "numoen-core/Lendgine.sol";
 library CallbackValidation {
     error VerifyError();
 
-    function verifyCallback(
-        address factory,
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) internal view {
-        verifyCallback(factory, LendgineAddress.getLendgineKey(tokenA, tokenB, fee));
-    }
-
     function verifyCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey) internal view {
         address lendgine = LendgineAddress.computeAddress(
             factory,
@@ -23,15 +14,6 @@ library CallbackValidation {
             lendgineKey.upperBound
         );
         if (msg.sender != lendgine) revert VerifyError();
-    }
-
-    function verifyPairCallback(
-        address factory,
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) internal view {
-        verifyCallback(factory, LendgineAddress.getLendgineKey(tokenA, tokenB, fee));
     }
 
     function verifyPairCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey) internal view {
