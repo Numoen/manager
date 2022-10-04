@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.4;
 
+import { CallbackValidation } from "./libraries/CallbackValidation.sol";
+
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol";
@@ -102,7 +104,7 @@ contract LiquidityManager is IPairMintCallback {
         bytes calldata data
     ) external override {
         PairMintCallbackData memory decoded = abi.decode(data, (PairMintCallbackData));
-        // TODO: verify sender
+        CallbackValidation.verifyPairCallback(factory, decoded.key);
         if (decoded.payer == address(this)) revert UnauthorizedError();
 
         if (amount0 > 0) pay(ERC20(decoded.key.base), decoded.payer, msg.sender, amount0);

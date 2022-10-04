@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.4;
 
+import { CallbackValidation } from "./libraries/CallbackValidation.sol";
+
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol";
@@ -68,7 +70,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
 
     function MintCallback(uint256 amountS, bytes calldata data) external override {
         CallbackData memory decoded = abi.decode(data, (CallbackData));
-        // TODO: verify sender
+        CallbackValidation.verifyCallback(factory, decoded.key);
 
         if (amountS > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amountS);
     }
