@@ -20,21 +20,9 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Mint(
-        address indexed recipient,
-        address indexed lendgine,
-        uint256 shares,
-        uint256 speculativeAmount,
-        uint256 baseAmount
-    );
+    event Mint(address indexed recipient, address indexed lendgine, uint256 shares, uint256 amountS, uint256 amountB);
 
-    event Burn(
-        address indexed payer,
-        address indexed lendgine,
-        uint256 shares,
-        uint256 speculativeAmount,
-        uint256 baseAmount
-    );
+    event Burn(address indexed payer, address indexed lendgine, uint256 shares, uint256 amountS, uint256 amountB);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -78,11 +66,11 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
         address payer;
     }
 
-    function MintCallback(uint256 amount0, bytes calldata data) external override {
+    function MintCallback(uint256 amountS, bytes calldata data) external override {
         CallbackData memory decoded = abi.decode(data, (CallbackData));
         // TODO: verify sender
 
-        if (amount0 > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amount0);
+        if (amountS > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amountS);
     }
 
     function PairMintCallback(
@@ -114,7 +102,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
         address base;
         address speculative;
         uint256 upperBound;
-        uint256 amount;
+        uint256 amountS;
         uint256 sharesMin;
         address recipient;
         uint256 deadline;
@@ -140,7 +128,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
 
         shares = Lendgine(lendgine).mint(
             params.recipient,
-            params.amount,
+            params.amountS,
             abi.encode(CallbackData({ key: lendgineKey, payer: msg.sender }))
         );
 
@@ -151,16 +139,16 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
 
         Pair(_pair).burn(params.recipient, amountB, 0);
 
-        emit Mint(params.recipient, lendgine, shares, params.amount, amountB);
+        emit Mint(params.recipient, lendgine, shares, params.amountS, amountB);
     }
 
     struct BurnParams {
         address base;
         address speculative;
         uint256 upperBound;
-        uint256 burnAmount;
-        uint256 speculativeMin;
-        uint256 baseMax;
+        uint256 shares;
+        uint256 amountSMin;
+        uint256 amountBMax;
         address recipient;
         uint256 deadline;
     }
@@ -184,20 +172,20 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
         address _pair = Lendgine(lendgine).pair();
 
         // mint using base assets
-        uint256 amountLP = (params.burnAmount * Lendgine(lendgine).totalLiquidityBorrowed()) /
+        uint256 amountLP = (params.shares * Lendgine(lendgine).totalLiquidityBorrowed()) /
             Lendgine(lendgine).totalSupply();
 
         amountS = (2 * amountLP * params.upperBound) / 10**36;
         amountB = amountLP / 1 ether;
 
-        if (amountS < params.speculativeMin) revert SlippageError();
-        if (amountB > params.baseMax) revert SlippageError();
+        if (amountS < params.amountSMin) revert SlippageError();
+        if (amountB > params.amountBMax) revert SlippageError();
 
         Pair(_pair).mint(amountB, 0, abi.encode(CallbackData({ key: lendgineKey, payer: msg.sender })));
 
-        ERC20(lendgine).transferFrom(msg.sender, lendgine, params.burnAmount);
+        ERC20(lendgine).transferFrom(msg.sender, lendgine, params.shares);
         Lendgine(lendgine).burn(params.recipient);
 
-        emit Burn(msg.sender, lendgine, params.burnAmount, amountS, amountB);
+        emit Burn(msg.sender, lendgine, params.shares, amountS, amountB);
     }
 }

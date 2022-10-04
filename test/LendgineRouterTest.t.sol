@@ -72,7 +72,7 @@ contract LiquidityManagerTest is Test {
                 base: address(base),
                 speculative: address(speculative),
                 upperBound: upperBound,
-                amount: amount,
+                amountS: amount,
                 sharesMin: 0,
                 recipient: spender,
                 deadline: deadline
@@ -164,9 +164,9 @@ contract LiquidityManagerTest is Test {
                 base: address(base),
                 speculative: address(speculative),
                 upperBound: upperBound,
-                burnAmount: 10**35,
-                speculativeMin: 0,
-                baseMax: 1 ether,
+                shares: 10**35,
+                amountSMin: 0,
+                amountBMax: 1 ether,
                 recipient: cuh,
                 deadline: 2
             })
