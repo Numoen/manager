@@ -3,6 +3,7 @@ pragma solidity ^0.8.4;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 
+import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol";
@@ -148,7 +149,7 @@ contract LiquidityManager is IPairMintCallback {
             upperBound: params.upperBound
         });
 
-        address lendgine = LendgineAddress.computeAddress(factory, params.base, params.speculative, params.upperBound);
+        address lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
         address _pair = Lendgine(lendgine).pair();
 
         liquidity = Pair(_pair).mint(
@@ -195,12 +196,12 @@ contract LiquidityManager is IPairMintCallback {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = LendgineAddress.computeAddress(
-            factory,
+        address lendgine = Factory(factory).getLendgine(
             lendgineKey.base,
             lendgineKey.speculative,
             lendgineKey.upperBound
         );
+
         address _pair = Lendgine(lendgine).pair();
 
         liquidity = Pair(_pair).mint(
@@ -246,12 +247,12 @@ contract LiquidityManager is IPairMintCallback {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = LendgineAddress.computeAddress(
-            factory,
+        address lendgine = Factory(factory).getLendgine(
             lendgineKey.base,
             lendgineKey.speculative,
             lendgineKey.upperBound
         );
+
         address _pair = Lendgine(lendgine).pair();
 
         liquidity = Pair(_pair).calcInvariant(params.amount0, params.amount1);
@@ -289,8 +290,7 @@ contract LiquidityManager is IPairMintCallback {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = LendgineAddress.computeAddress(
-            factory,
+        address lendgine = Factory(factory).getLendgine(
             lendgineKey.base,
             lendgineKey.speculative,
             lendgineKey.upperBound

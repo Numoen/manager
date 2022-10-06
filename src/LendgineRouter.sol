@@ -3,6 +3,7 @@ pragma solidity ^0.8.4;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 
+import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol";
@@ -125,7 +126,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
             upperBound: params.upperBound
         });
 
-        lendgine = LendgineAddress.computeAddress(factory, params.base, params.speculative, params.upperBound);
+        lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
         address _pair = Lendgine(lendgine).pair();
 
         shares = Lendgine(lendgine).mint(
@@ -133,6 +134,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
             params.amountS,
             abi.encode(CallbackData({ key: lendgineKey, payer: msg.sender }))
         );
+        // TODO: should use lpAmount instead of shares
 
         if (shares < params.sharesMin) revert SlippageError();
 
@@ -170,7 +172,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
             upperBound: params.upperBound
         });
 
-        lendgine = LendgineAddress.computeAddress(factory, params.base, params.speculative, params.upperBound);
+        lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
         address _pair = Lendgine(lendgine).pair();
 
         // mint using base assets

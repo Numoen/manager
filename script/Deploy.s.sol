@@ -9,7 +9,7 @@ import { LendgineRouter } from "../src/LendgineRouter.sol";
 
 contract DeployScript is Script {
     function run() public {
-        address factory = 0x8391fAeB0fED26D3B57A08E4809575fCD1D2d00C;
+        address factory = 0x2CDb7D13a409588bbB47a9357f9c9dD61aefbf24;
 
         uint256 pk = vm.envUint("PRIVATE_KEY");
         vm.broadcast(pk);
