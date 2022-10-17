@@ -1,14 +1,15 @@
 pragma solidity ^0.8.4;
 
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
+import { Factory } from "numoen-core/Factory.sol";
+
+import { LendgineAddress } from "./LendgineAddress.sol";
 
 library CallbackValidation {
     error VerifyError();
 
     function verifyCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey) internal view {
-        address lendgine = LendgineAddress.computeAddress(
-            factory,
+        address lendgine = Factory(factory).getLendgine(
             lendgineKey.base,
             lendgineKey.speculative,
             lendgineKey.upperBound
@@ -17,8 +18,7 @@ library CallbackValidation {
     }
 
     function verifyPairCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey) internal view {
-        address lendgine = LendgineAddress.computeAddress(
-            factory,
+        address lendgine = Factory(factory).getLendgine(
             lendgineKey.base,
             lendgineKey.speculative,
             lendgineKey.upperBound

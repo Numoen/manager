@@ -1,3 +1,2 @@
 forge-std/=lib/forge-std/src/
-solmate/=lib/solmate/src/
 numoen-core/=lib/core/src/
