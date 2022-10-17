@@ -19,6 +19,7 @@ abstract contract CallbackHelper is IMintCallback {
     function MintCallback(uint256 amount, bytes calldata data) external override {
         CallbackData memory decoded = abi.decode(data, (CallbackData));
         // CallbackValidation.verifyCallback(factory, decoded.poolKey);
+        console2.log("in");
 
         if (decoded.payer == address(this)) {
             if (amount > 0) SafeTransferLib.safeTransfer(decoded.key.speculative, msg.sender, amount);
@@ -26,5 +27,6 @@ abstract contract CallbackHelper is IMintCallback {
             if (amount > 0)
                 SafeTransferLib.safeTransferFrom(decoded.key.speculative, decoded.payer, msg.sender, amount);
         }
+        console2.log("out");
     }
 }
