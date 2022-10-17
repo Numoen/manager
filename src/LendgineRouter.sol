@@ -1,24 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.4;
 
-import { CallbackValidation } from "./libraries/CallbackValidation.sol";
-
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { ERC20 } from "solmate/tokens/ERC20.sol";
+
+import { CallbackValidation } from "./libraries/CallbackValidation.sol";
+import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
-import { IPairMintCallback } from "numoen-core/interfaces/IPairMintCallback.sol";
-
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
-import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
 import "forge-std/console2.sol";
 
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
-contract LendgineRouter is IMintCallback, IPairMintCallback {
+contract LendgineRouter is IMintCallback {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -73,28 +70,7 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
         CallbackData memory decoded = abi.decode(data, (CallbackData));
         CallbackValidation.verifyCallback(factory, decoded.key);
 
-        if (amountS > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amountS);
-    }
-
-    function PairMintCallback(
-        uint256 amount0,
-        uint256 amount1,
-        bytes calldata data
-    ) external override {
-        CallbackData memory decoded = abi.decode(data, (CallbackData));
-        if (decoded.payer == address(this)) revert UnauthorizedError();
-
-        if (amount0 > 0) pay(ERC20(decoded.key.base), decoded.payer, msg.sender, amount0);
-        if (amount1 > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amount1);
-    }
-
-    function pay(
-        ERC20 token,
-        address payer,
-        address recipient,
-        uint256 value
-    ) internal {
-        SafeTransferLib.safeTransferFrom(token, payer, recipient, value);
+        if (amountS > 0) SafeTransferLib.safeTransferFrom(decoded.key.speculative, decoded.payer, msg.sender, amountS);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -134,14 +110,16 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
             params.amountS,
             abi.encode(CallbackData({ key: lendgineKey, payer: msg.sender }))
         );
-        // TODO: should use lpAmount instead of shares
+
+        uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(shares);
 
         if (shares < params.sharesMin) revert SlippageError();
 
         // withdraw entire lp into base tokens
-        amountB = shares / 1 ether;
+        uint256 upperBound = Pair(_pair).upperBound();
+        amountB = ((upperBound**2) * liquidity) / (1 ether * 1 ether);
 
-        Pair(_pair).burn(params.recipient, amountB, 0);
+        Pair(_pair).burn(params.recipient, amountB, 0, liquidity);
 
         emit Mint(params.recipient, lendgine, shares, params.amountS, amountB);
     }
@@ -166,28 +144,21 @@ contract LendgineRouter is IMintCallback, IPairMintCallback {
             uint256 amountB
         )
     {
-        LendgineAddress.LendgineKey memory lendgineKey = LendgineAddress.LendgineKey({
-            base: params.base,
-            speculative: params.speculative,
-            upperBound: params.upperBound
-        });
-
         lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
         address _pair = Lendgine(lendgine).pair();
 
-        // mint using base assets
-        uint256 amountLP = (params.shares * Lendgine(lendgine).totalLiquidityBorrowed()) /
-            Lendgine(lendgine).totalSupply();
-
-        amountS = (2 * amountLP * params.upperBound) / 10**36;
-        amountB = amountLP / 1 ether;
+        uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
+        amountS = Lendgine(lendgine).convertLiquidityToAsset(liquidity);
+        uint256 upperBound = Pair(_pair).upperBound();
+        amountB = ((upperBound**2) * liquidity) / (1 ether * 1 ether);
 
         if (amountS < params.amountSMin) revert SlippageError();
         if (amountB > params.amountBMax) revert SlippageError();
 
-        Pair(_pair).mint(amountB, 0, abi.encode(CallbackData({ key: lendgineKey, payer: msg.sender })));
+        SafeTransferLib.safeTransferFrom(params.base, msg.sender, _pair, amountB);
+        Pair(_pair).mint(liquidity);
 
-        ERC20(lendgine).transferFrom(msg.sender, lendgine, params.shares);
+        Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
         Lendgine(lendgine).burn(params.recipient);
 
         emit Burn(msg.sender, lendgine, params.shares, amountS, amountB);

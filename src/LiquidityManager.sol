@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.0;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
+import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
 
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { ERC20 } from "solmate/tokens/ERC20.sol";
-
-import { IPairMintCallback } from "numoen-core/interfaces/IPairMintCallback.sol";
-
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
-import { SafeTransferLib } from "solmate/utils/SafeTransferLib.sol";
 
 import "forge-std/console2.sol";
 
@@ -19,7 +15,7 @@ import "forge-std/console2.sol";
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
 /// @author Modified from Uniswap
 /// (https://github.com/Uniswap/v3-periphery/blob/main/contracts/NonfungiblePositionManager.sol)
-contract LiquidityManager is IPairMintCallback {
+contract LiquidityManager {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -44,6 +40,8 @@ contract LiquidityManager is IPairMintCallback {
 
     error UnauthorizedError();
 
+    error CollectError();
+
     /*//////////////////////////////////////////////////////////////
                                IMMUTABLES
     //////////////////////////////////////////////////////////////*/
@@ -55,12 +53,12 @@ contract LiquidityManager is IPairMintCallback {
     //////////////////////////////////////////////////////////////*/
 
     struct Position {
-        address operator;
-        uint80 lendgineID;
-        uint24 tick;
         uint256 liquidity;
         uint256 rewardPerLiquidityPaid;
         uint256 tokensOwed;
+        uint80 lendgineID;
+        address operator;
+        uint16 tick;
     }
 
     mapping(address => uint80) private _lendgineIDs;
@@ -91,37 +89,6 @@ contract LiquidityManager is IPairMintCallback {
     }
 
     /*//////////////////////////////////////////////////////////////
-                            CALLBACK LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    struct PairMintCallbackData {
-        LendgineAddress.LendgineKey key;
-        address payer;
-    }
-
-    function PairMintCallback(
-        uint256 amount0,
-        uint256 amount1,
-        bytes calldata data
-    ) external override {
-        PairMintCallbackData memory decoded = abi.decode(data, (PairMintCallbackData));
-        CallbackValidation.verifyPairCallback(factory, decoded.key);
-        if (decoded.payer == address(this)) revert UnauthorizedError();
-
-        if (amount0 > 0) pay(ERC20(decoded.key.base), decoded.payer, msg.sender, amount0);
-        if (amount1 > 0) pay(ERC20(decoded.key.speculative), decoded.payer, msg.sender, amount1);
-    }
-
-    function pay(
-        ERC20 token,
-        address payer,
-        address recipient,
-        uint256 value
-    ) internal {
-        SafeTransferLib.safeTransferFrom(token, payer, recipient, value);
-    }
-
-    /*//////////////////////////////////////////////////////////////
                         LIQUIDITY MANAGER LOGIC
     //////////////////////////////////////////////////////////////*/
 
@@ -129,19 +96,15 @@ contract LiquidityManager is IPairMintCallback {
         address base;
         address speculative;
         uint256 upperBound;
-        uint24 tick;
+        uint16 tick;
         uint256 amount0;
         uint256 amount1;
-        uint256 liquidityMin;
+        uint256 liquidity;
         address recipient;
         uint256 deadline;
     }
 
-    function mint(MintParams calldata params)
-        external
-        checkDeadline(params.deadline)
-        returns (uint256 tokenID, uint256 liquidity)
-    {
+    function mint(MintParams calldata params) external checkDeadline(params.deadline) returns (uint256 tokenID) {
         tokenID = _nextID++;
         LendgineAddress.LendgineKey memory lendgineKey = LendgineAddress.LendgineKey({
             base: params.base,
@@ -152,18 +115,14 @@ contract LiquidityManager is IPairMintCallback {
         address lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
         address _pair = Lendgine(lendgine).pair();
 
-        liquidity = Pair(_pair).mint(
-            params.amount0,
-            params.amount1,
-            abi.encode(PairMintCallbackData({ key: lendgineKey, payer: msg.sender }))
-        );
+        SafeTransferLib.safeTransferFrom(params.base, msg.sender, _pair, params.amount0);
+        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, _pair, params.amount1);
+        Pair(_pair).mint(params.liquidity);
 
-        if (liquidity < params.liquidityMin) revert SlippageError();
+        // if (liquidity != params.liquidity) revert SlippageError();
 
-        Lendgine(lendgine).mintMaker(address(this), params.tick);
-
+        Lendgine(lendgine).deposit(address(this), params.tick);
         uint80 lendgineID = cacheLendgineKey(lendgine, lendgineKey);
-
         bytes32 positionKey = keccak256(abi.encode(address(this), params.tick));
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
 
@@ -171,27 +130,23 @@ contract LiquidityManager is IPairMintCallback {
             operator: params.recipient,
             lendgineID: lendgineID,
             tick: params.tick,
-            liquidity: liquidity,
+            liquidity: params.liquidity,
             rewardPerLiquidityPaid: rewardPerLiquidityPaid,
             tokensOwed: 0
         });
 
-        emit Mint(params.recipient, tokenID, liquidity, params.amount0, params.amount1);
+        emit Mint(params.recipient, tokenID, params.liquidity, params.amount0, params.amount1);
     }
 
     struct IncreaseLiquidityParams {
         uint256 tokenID;
         uint256 amount0;
         uint256 amount1;
-        uint256 liquidityMin;
+        uint256 liquidity;
         uint256 deadline;
     }
 
-    function increaseLiquidity(IncreaseLiquidityParams calldata params)
-        external
-        checkDeadline(params.deadline)
-        returns (uint256 liquidity)
-    {
+    function increaseLiquidity(IncreaseLiquidityParams calldata params) external checkDeadline(params.deadline) {
         Position storage position = _positions[params.tokenID];
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
@@ -201,46 +156,39 @@ contract LiquidityManager is IPairMintCallback {
             lendgineKey.speculative,
             lendgineKey.upperBound
         );
-
         address _pair = Lendgine(lendgine).pair();
 
-        liquidity = Pair(_pair).mint(
-            params.amount0,
-            params.amount1,
-            abi.encode(PairMintCallbackData({ key: lendgineKey, payer: msg.sender }))
-        );
+        SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, _pair, params.amount0);
+        SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, _pair, params.amount1);
+        Pair(_pair).mint(params.liquidity);
 
-        if (liquidity < params.liquidityMin) revert SlippageError();
+        // if (liquidity != params.liquidityMin) revert SlippageError();
 
-        Lendgine(lendgine).mintMaker(address(this), position.tick);
+        Lendgine(lendgine).deposit(address(this), position.tick);
 
         bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
 
         position.tokensOwed +=
             (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
-            (1 ether * 1 ether);
+            (1 ether);
 
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
-        position.liquidity += liquidity;
+        position.liquidity += params.liquidity;
 
-        emit IncreaseLiquidity(params.tokenID, liquidity, params.amount0, params.amount1);
+        emit IncreaseLiquidity(params.tokenID, params.liquidity, params.amount0, params.amount1);
     }
 
     struct DecreaseLiquidityParams {
         uint256 tokenID;
         uint256 amount0;
         uint256 amount1;
-        uint256 liquidityMax;
+        uint256 liquidity;
         address recipient;
         uint256 deadline;
     }
 
-    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
-        external
-        checkDeadline(params.deadline)
-        returns (uint256 liquidity)
-    {
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params) external checkDeadline(params.deadline) {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
@@ -252,35 +200,27 @@ contract LiquidityManager is IPairMintCallback {
             lendgineKey.speculative,
             lendgineKey.upperBound
         );
-
         address _pair = Lendgine(lendgine).pair();
 
-        liquidity = Pair(_pair).calcInvariant(params.amount0, params.amount1);
-
-        if (liquidity > params.liquidityMax) revert SlippageError();
-
-        Lendgine(lendgine).burnMaker(position.tick, liquidity);
-
-        Pair(_pair).burn(params.recipient, params.amount0, params.amount1);
+        Lendgine(lendgine).withdraw(position.tick, params.liquidity);
+        Pair(_pair).burn(params.recipient, params.amount0, params.amount1, params.liquidity);
 
         bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
 
         position.tokensOwed +=
             (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
-            (1 ether * 1 ether);
-
+            (1 ether);
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
+        position.liquidity -= params.liquidity;
 
-        position.liquidity -= liquidity;
-
-        emit DecreaseLiquidity(params.tokenID, liquidity, params.amount0, params.amount1);
+        emit DecreaseLiquidity(params.tokenID, params.liquidity, params.amount0, params.amount1);
     }
 
     struct CollectParams {
         uint256 tokenID;
         address recipient;
-        uint256 amountMax;
+        uint256 amountRequested;
     }
 
     function collect(CollectParams calldata params) external returns (uint256 amount) {
@@ -297,23 +237,20 @@ contract LiquidityManager is IPairMintCallback {
         );
 
         bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
-        Lendgine(lendgine).accrueMakerInterest(positionKey, position.tick);
-
+        Lendgine(lendgine).accruePositionInterest(position.tick);
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
 
         position.tokensOwed +=
             (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
-            (1 ether * 1 ether);
-
+            (1 ether);
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
 
-        Lendgine(lendgine).collectMaker(address(this), position.tick);
-
-        amount = position.tokensOwed > params.amountMax ? params.amountMax : position.tokensOwed;
-
-        SafeTransferLib.safeTransfer(ERC20(lendgineKey.speculative), params.recipient, amount);
-
+        amount = params.amountRequested > position.tokensOwed ? position.tokensOwed : params.amountRequested;
         position.tokensOwed -= amount;
+
+        uint256 amountSent = Lendgine(lendgine).collect(params.recipient, position.tick, amount);
+
+        if (amountSent < amount) revert CollectError();
 
         emit Collect(params.tokenID, amount);
     }
@@ -345,7 +282,7 @@ contract LiquidityManager is IPairMintCallback {
             address base,
             address speculative,
             uint256 upperBound,
-            uint24 tick,
+            uint16 tick,
             uint256 liquidity,
             uint256 rewardPerLiquidityPaid,
             uint256 tokensOwed

@@ -8,8 +8,8 @@ import { LiquidityManager } from "../src/LiquidityManager.sol";
 import { LendgineRouter } from "../src/LendgineRouter.sol";
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
-import { ERC20 } from "solmate/tokens/ERC20.sol";
+import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
+import { ERC20 } from "numoen-core/ERC20.sol";
 
 contract Burn is Script {
     function run() public {
