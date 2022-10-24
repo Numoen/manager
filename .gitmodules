@@ -4,3 +4,6 @@
 [submodule "lib/core"]
 	path = lib/core
 	url = https://github.com/numoen/core
+[submodule "lib/prb-math"]
+	path = lib/prb-math
+	url = https://github.com/paulrberg/prb-math
