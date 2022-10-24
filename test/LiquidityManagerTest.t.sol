@@ -5,7 +5,7 @@ import { LiquidityManager } from "../src/LiquidityManager.sol";
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { CallbackHelper } from "./utils/CallbackHelper.sol";
@@ -47,7 +47,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         uint256 amount0,
         uint256 amount1,
         uint256 liquidity,
-        uint16 tick,
         uint256 deadline
     ) public returns (uint256 tokenID) {
         base.mint(spender, amount0);
@@ -64,8 +63,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             LiquidityManager.MintParams({
                 base: address(base),
                 speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                tick: tick,
                 amount0: amount0,
                 amount1: amount1,
                 liquidity: liquidity,
@@ -82,13 +82,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         cuh = mkaddr("cuh");
         dennis = mkaddr("dennis");
 
-        key = LendgineAddress.getLendgineKey(address(base), address(speculative), upperBound);
+        key = LendgineAddress.getLendgineKey(address(base), address(speculative), 18, 18, upperBound);
     }
 
     function setUp() public {
         factory = new Factory();
 
-        address _lendgine = factory.createLendgine(address(base), address(speculative), upperBound);
+        address _lendgine = factory.createLendgine(address(base), address(speculative), 18, 18, upperBound);
         lendgine = Lendgine(_lendgine);
 
         address _pair = lendgine.pair();
@@ -98,14 +98,15 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testMintBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 1, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
         (
             address _operator,
             address _base,
             address _speculative,
+            uint256 _baseScaleFactor,
+            uint256 _speculativeScaleFactor,
             uint256 _upperBound,
-            uint16 _tick,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
             uint256 _tokensOwed
@@ -116,7 +117,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(address(base), _base);
         assertEq(address(speculative), _speculative);
         assertEq(upperBound, _upperBound);
-        assertEq(1, _tick);
         assertEq(_liquidity, 1 ether);
         assertEq(_rewardPerLiquidityPaid, 0);
         assertEq(_tokensOwed, 0);
@@ -125,7 +125,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     // test double mint
 
     function testIncreaseBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 1, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 8 ether);
@@ -151,8 +151,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             address _operator,
             address _base,
             address _speculative,
+            uint256 _baseScaleFactor,
+            uint256 _speculativeScaleFactor,
             uint256 _upperBound,
-            uint16 _tick,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
             uint256 _tokensOwed
@@ -162,14 +163,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(address(base), _base);
         assertEq(address(speculative), _speculative);
         assertEq(upperBound, _upperBound);
-        assertEq(1, _tick);
         assertEq(_liquidity, 2 ether);
         assertEq(_rewardPerLiquidityPaid, 0);
         assertEq(_tokensOwed, 0);
     }
 
     function testIncreaseInterest() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 1, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
         mint(address(this), 1 ether);
 
@@ -201,8 +201,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             address _operator,
             address _base,
             address _speculative,
+            uint256 _baseScaleFactor,
+            uint256 _speculativeScaleFactor,
             uint256 _upperBound,
-            uint16 _tick,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
             uint256 _tokensOwed
@@ -212,14 +213,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(address(base), _base);
         assertEq(address(speculative), _speculative);
         assertEq(upperBound, _upperBound);
-        assertEq(1, _tick);
         assertEq(_liquidity, 2 ether);
         assertEq(_rewardPerLiquidityPaid, (dilution * 10));
         assertEq(_tokensOwed, (dilution * 10));
     }
 
     function testDecreaseBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 1, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
         vm.prank(cuh);
         liquidityManager.decreaseLiquidity(
@@ -237,8 +237,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             address _operator,
             address _base,
             address _speculative,
+            uint256 _baseScaleFactor,
+            uint256 _speculativeScaleFactor,
             uint256 _upperBound,
-            uint16 _tick,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
             uint256 _tokensOwed
@@ -248,14 +249,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(address(base), _base);
         assertEq(address(speculative), _speculative);
         assertEq(upperBound, _upperBound);
-        assertEq(1, _tick);
         assertEq(_liquidity, 0);
         assertEq(_rewardPerLiquidityPaid, 0);
         assertEq(_tokensOwed, 0);
     }
 
     function testDecreaseInterest() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 1, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
         mint(address(this), 1 ether);
 
@@ -279,8 +279,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             address _operator,
             address _base,
             address _speculative,
+            uint256 _baseScaleFactor,
+            uint256 _speculativeScaleFactor,
             uint256 _upperBound,
-            uint16 _tick,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
             uint256 _tokensOwed
@@ -290,14 +291,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(address(base), _base);
         assertEq(address(speculative), _speculative);
         assertEq(upperBound, _upperBound);
-        assertEq(1, _tick);
         assertEq(_liquidity, 1 ether - 1_000_000);
         assertEq(_rewardPerLiquidityPaid, (dilution * 10));
         assertEq(_tokensOwed, (dilution * 10));
     }
 
     function testCollectBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 1, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
         mint(address(this), 1 ether);
 
@@ -317,8 +317,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             address _operator,
             address _base,
             address _speculative,
+            uint256 _baseScaleFactor,
+            uint256 _speculativeScaleFactor,
             uint256 _upperBound,
-            uint16 _tick,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
             uint256 _tokensOwed
@@ -328,7 +329,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(address(base), _base);
         assertEq(address(speculative), _speculative);
         assertEq(upperBound, _upperBound);
-        assertEq(1, _tick);
         assertEq(_liquidity, 1 ether);
         assertEq(_rewardPerLiquidityPaid, (dilution * 10));
         assertEq(_tokensOwed, 0);

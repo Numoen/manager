@@ -7,7 +7,7 @@ import { Pair } from "numoen-core/Pair.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
-import { LendgineAddress } from "./libraries/LendgineAddress.sol";
+import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
 
@@ -80,6 +80,8 @@ contract LendgineRouter is IMintCallback {
     struct MintParams {
         address base;
         address speculative;
+        uint256 baseScaleFactor;
+        uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 amountS;
         uint256 sharesMin;
@@ -99,10 +101,19 @@ contract LendgineRouter is IMintCallback {
         LendgineAddress.LendgineKey memory lendgineKey = LendgineAddress.LendgineKey({
             base: params.base,
             speculative: params.speculative,
+            baseScaleFactor: params.baseScaleFactor,
+            speculativeScaleFactor: params.speculativeScaleFactor,
             upperBound: params.upperBound
         });
 
-        lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
+        lendgine = LendgineAddress.computeAddress(
+            factory,
+            params.base,
+            params.speculative,
+            params.baseScaleFactor,
+            params.speculativeScaleFactor,
+            params.upperBound
+        );
         address _pair = Lendgine(lendgine).pair();
 
         shares = Lendgine(lendgine).mint(
@@ -127,6 +138,8 @@ contract LendgineRouter is IMintCallback {
     struct BurnParams {
         address base;
         address speculative;
+        uint256 baseScaleFactor;
+        uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 shares;
         uint256 amountSMin;
@@ -144,7 +157,14 @@ contract LendgineRouter is IMintCallback {
             uint256 amountB
         )
     {
-        lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
+        lendgine = LendgineAddress.computeAddress(
+            factory,
+            params.base,
+            params.speculative,
+            params.baseScaleFactor,
+            params.speculativeScaleFactor,
+            params.upperBound
+        );
         address _pair = Lendgine(lendgine).pair();
 
         uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);

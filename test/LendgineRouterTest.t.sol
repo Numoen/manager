@@ -6,7 +6,7 @@ import { LiquidityManager } from "../src/LiquidityManager.sol";
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { CallbackHelper } from "./utils/CallbackHelper.sol";
@@ -66,6 +66,8 @@ contract LiquidityManagerTest is Test {
             LendgineRouter.MintParams({
                 base: address(base),
                 speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
                 upperBound: upperBound,
                 amountS: amount,
                 sharesMin: 0,
@@ -80,7 +82,6 @@ contract LiquidityManagerTest is Test {
         uint256 amount0,
         uint256 amount1,
         uint256 liquidity,
-        uint16 tick,
         uint256 deadline
     ) public returns (uint256 tokenID) {
         base.mint(spender, amount0);
@@ -97,8 +98,9 @@ contract LiquidityManagerTest is Test {
             LiquidityManager.MintParams({
                 base: address(base),
                 speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                tick: tick,
                 amount0: amount0,
                 amount1: amount1,
                 liquidity: liquidity,
@@ -111,7 +113,7 @@ contract LiquidityManagerTest is Test {
     function setUp() public {
         factory = new Factory();
 
-        address _lendgine = factory.createLendgine(address(base), address(speculative), upperBound);
+        address _lendgine = factory.createLendgine(address(base), address(speculative), 18, 18, upperBound);
         lendgine = Lendgine(_lendgine);
 
         address _pair = lendgine.pair();
@@ -122,7 +124,7 @@ contract LiquidityManagerTest is Test {
     }
 
     function testMintBasic() public {
-        mintLiq(address(this), 100 ether, 800 ether, 100 ether, 1, 2);
+        mintLiq(address(this), 100 ether, 800 ether, 100 ether, 2);
         (address _lendgine, uint256 _shares, uint256 _amountB) = mint(cuh, 1 ether, 2);
 
         assertEq(base.balanceOf(cuh), 2.5 ether);
@@ -140,7 +142,7 @@ contract LiquidityManagerTest is Test {
     }
 
     function testBurnBasic() public {
-        mintLiq(address(this), 10 ether, 80 ether, 10 ether, 1, 2);
+        mintLiq(address(this), 10 ether, 80 ether, 10 ether, 2);
         mint(cuh, 1 ether, 2);
 
         base.mint(cuh, 2.5 ether);
@@ -156,6 +158,8 @@ contract LiquidityManagerTest is Test {
             LendgineRouter.BurnParams({
                 base: address(base),
                 speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
                 upperBound: upperBound,
                 shares: 0.1 ether,
                 amountSMin: 0,

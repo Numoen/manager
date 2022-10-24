@@ -2,12 +2,12 @@
 pragma solidity ^0.8.0;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
-import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
 
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
+import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import "forge-std/console2.sol";
 
@@ -58,7 +58,6 @@ contract LiquidityManager {
         uint256 tokensOwed;
         uint80 lendgineID;
         address operator;
-        uint16 tick;
     }
 
     mapping(address => uint80) private _lendgineIDs;
@@ -95,8 +94,9 @@ contract LiquidityManager {
     struct MintParams {
         address base;
         address speculative;
+        uint256 baseScaleFactor;
+        uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint16 tick;
         uint256 amount0;
         uint256 amount1;
         uint256 liquidity;
@@ -109,10 +109,19 @@ contract LiquidityManager {
         LendgineAddress.LendgineKey memory lendgineKey = LendgineAddress.LendgineKey({
             base: params.base,
             speculative: params.speculative,
+            baseScaleFactor: params.baseScaleFactor,
+            speculativeScaleFactor: params.speculativeScaleFactor,
             upperBound: params.upperBound
         });
 
-        address lendgine = Factory(factory).getLendgine(params.base, params.speculative, params.upperBound);
+        address lendgine = LendgineAddress.computeAddress(
+            factory,
+            params.base,
+            params.speculative,
+            params.baseScaleFactor,
+            params.speculativeScaleFactor,
+            params.upperBound
+        );
         address _pair = Lendgine(lendgine).pair();
 
         SafeTransferLib.safeTransferFrom(params.base, msg.sender, _pair, params.amount0);
@@ -121,15 +130,13 @@ contract LiquidityManager {
 
         // if (liquidity != params.liquidity) revert SlippageError();
 
-        Lendgine(lendgine).deposit(address(this), params.tick);
+        Lendgine(lendgine).deposit(address(this));
         uint80 lendgineID = cacheLendgineKey(lendgine, lendgineKey);
-        bytes32 positionKey = keccak256(abi.encode(address(this), params.tick));
-        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
         _positions[tokenID] = Position({
             operator: params.recipient,
             lendgineID: lendgineID,
-            tick: params.tick,
             liquidity: params.liquidity,
             rewardPerLiquidityPaid: rewardPerLiquidityPaid,
             tokensOwed: 0
@@ -151,9 +158,12 @@ contract LiquidityManager {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = Factory(factory).getLendgine(
+        address lendgine = LendgineAddress.computeAddress(
+            factory,
             lendgineKey.base,
             lendgineKey.speculative,
+            lendgineKey.baseScaleFactor,
+            lendgineKey.speculativeScaleFactor,
             lendgineKey.upperBound
         );
         address _pair = Lendgine(lendgine).pair();
@@ -164,10 +174,9 @@ contract LiquidityManager {
 
         // if (liquidity != params.liquidityMin) revert SlippageError();
 
-        Lendgine(lendgine).deposit(address(this), position.tick);
+        Lendgine(lendgine).deposit(address(this));
 
-        bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
-        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
         position.tokensOwed +=
             (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
@@ -195,18 +204,20 @@ contract LiquidityManager {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = Factory(factory).getLendgine(
+        address lendgine = LendgineAddress.computeAddress(
+            factory,
             lendgineKey.base,
             lendgineKey.speculative,
+            lendgineKey.baseScaleFactor,
+            lendgineKey.speculativeScaleFactor,
             lendgineKey.upperBound
         );
         address _pair = Lendgine(lendgine).pair();
 
-        Lendgine(lendgine).withdraw(position.tick, params.liquidity);
+        Lendgine(lendgine).withdraw(params.liquidity);
         Pair(_pair).burn(params.recipient, params.amount0, params.amount1, params.liquidity);
 
-        bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
-        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
         position.tokensOwed +=
             (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
@@ -230,15 +241,17 @@ contract LiquidityManager {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = Factory(factory).getLendgine(
+        address lendgine = LendgineAddress.computeAddress(
+            factory,
             lendgineKey.base,
             lendgineKey.speculative,
+            lendgineKey.baseScaleFactor,
+            lendgineKey.speculativeScaleFactor,
             lendgineKey.upperBound
         );
 
-        bytes32 positionKey = keccak256(abi.encode(address(this), position.tick));
-        Lendgine(lendgine).accruePositionInterest(position.tick);
-        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(positionKey);
+        Lendgine(lendgine).accruePositionInterest();
+        (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
         position.tokensOwed +=
             (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
@@ -248,7 +261,7 @@ contract LiquidityManager {
         amount = params.amountRequested > position.tokensOwed ? position.tokensOwed : params.amountRequested;
         position.tokensOwed -= amount;
 
-        uint256 amountSent = Lendgine(lendgine).collect(params.recipient, position.tick, amount);
+        uint256 amountSent = Lendgine(lendgine).collect(params.recipient, amount);
 
         if (amountSent < amount) revert CollectError();
 
@@ -281,8 +294,9 @@ contract LiquidityManager {
             address operator,
             address base,
             address speculative,
+            uint256 baseScaleFactor,
+            uint256 speculativeScaleFactor,
             uint256 upperBound,
-            uint16 tick,
             uint256 liquidity,
             uint256 rewardPerLiquidityPaid,
             uint256 tokensOwed
@@ -295,8 +309,9 @@ contract LiquidityManager {
             position.operator,
             lendgineKey.base,
             lendgineKey.speculative,
+            lendgineKey.baseScaleFactor,
+            lendgineKey.speculativeScaleFactor,
             lendgineKey.upperBound,
-            position.tick,
             position.liquidity,
             position.rewardPerLiquidityPaid,
             position.tokensOwed
