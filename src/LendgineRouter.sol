@@ -103,7 +103,7 @@ contract LendgineRouter is IMintCallback {
             upperBound: params.upperBound
         });
 
-        lendgine = LendgineAddress.computeAddress(
+        lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             params.base,
             params.speculative,
@@ -154,7 +154,7 @@ contract LendgineRouter is IMintCallback {
             uint256 amountB
         )
     {
-        lendgine = LendgineAddress.computeAddress(
+        lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             params.base,
             params.speculative,

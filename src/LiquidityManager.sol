@@ -4,12 +4,13 @@ pragma solidity ^0.8.0;
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
 
-import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
+
+import "forge-std/console2.sol";
 
 /// @notice Wraps Numoen liquidity positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
@@ -114,7 +115,7 @@ contract LiquidityManager {
             upperBound: params.upperBound
         });
 
-        address lendgine = LendgineAddress.computeAddress(
+        address lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             params.base,
             params.speculative,
@@ -122,11 +123,18 @@ contract LiquidityManager {
             params.speculativeScaleFactor,
             params.upperBound
         );
-        address _pair = Lendgine(lendgine).pair();
+        address pair = LendgineAddress.computePairAddress(
+            factory,
+            params.base,
+            params.speculative,
+            params.baseScaleFactor,
+            params.speculativeScaleFactor,
+            params.upperBound
+        );
 
-        SafeTransferLib.safeTransferFrom(params.base, msg.sender, _pair, params.amount0);
-        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, _pair, params.amount1);
-        Pair(_pair).mint(params.liquidity);
+        SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, params.amount0);
+        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, params.amount1);
+        Pair(pair).mint(params.liquidity);
         Lendgine(lendgine).deposit(address(this));
 
         uint80 lendgineID = cacheLendgineKey(lendgine, lendgineKey);
@@ -159,7 +167,7 @@ contract LiquidityManager {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = LendgineAddress.computeAddress(
+        address lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             lendgineKey.base,
             lendgineKey.speculative,
@@ -167,11 +175,18 @@ contract LiquidityManager {
             lendgineKey.speculativeScaleFactor,
             lendgineKey.upperBound
         );
-        address _pair = Lendgine(lendgine).pair();
+        address pair = LendgineAddress.computePairAddress(
+            factory,
+            lendgineKey.base,
+            lendgineKey.speculative,
+            lendgineKey.baseScaleFactor,
+            lendgineKey.speculativeScaleFactor,
+            lendgineKey.upperBound
+        );
 
-        SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, _pair, params.amount0);
-        SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, _pair, params.amount1);
-        Pair(_pair).mint(params.liquidity);
+        SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, pair, params.amount0);
+        SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, pair, params.amount1);
+        Pair(pair).mint(params.liquidity);
         Lendgine(lendgine).deposit(address(this));
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
@@ -203,7 +218,7 @@ contract LiquidityManager {
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = LendgineAddress.computeAddress(
+        address lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             lendgineKey.base,
             lendgineKey.speculative,
@@ -211,10 +226,17 @@ contract LiquidityManager {
             lendgineKey.speculativeScaleFactor,
             lendgineKey.upperBound
         );
-        address _pair = Lendgine(lendgine).pair();
+        address pair = LendgineAddress.computePairAddress(
+            factory,
+            lendgineKey.base,
+            lendgineKey.speculative,
+            lendgineKey.baseScaleFactor,
+            lendgineKey.speculativeScaleFactor,
+            lendgineKey.upperBound
+        );
 
         Lendgine(lendgine).withdraw(params.liquidity);
-        Pair(_pair).burn(params.recipient, params.amount0, params.amount1, params.liquidity);
+        Pair(pair).burn(params.recipient, params.amount0, params.amount1, params.liquidity);
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
@@ -238,10 +260,11 @@ contract LiquidityManager {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
+        if (position.lendgineID == 0) revert PositionInvalidError();
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
-        address lendgine = LendgineAddress.computeAddress(
+        address lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             lendgineKey.base,
             lendgineKey.speculative,

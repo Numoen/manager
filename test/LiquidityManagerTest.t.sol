@@ -134,10 +134,14 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     function setUp() public {
         factory = new Factory();
 
-        address _lendgine = factory.createLendgine(address(base), address(speculative), 18, 18, upperBound);
+        (address _lendgine, address _pair) = factory.createLendgine(
+            address(base),
+            address(speculative),
+            18,
+            18,
+            upperBound
+        );
         lendgine = Lendgine(_lendgine);
-
-        address _pair = lendgine.pair();
         pair = Pair(_pair);
 
         liquidityManager = new LiquidityManager(address(factory));
@@ -150,8 +154,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
 
         assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
     }
-
-    // test double mint
 
     function testIncreaseBasic() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
@@ -291,5 +293,127 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertPosition(tokenID, cuh, key, 1 ether, dilutionLP * 10, 0);
     }
 
-    // test double collect
+    function testOverCollect() public {
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
+
+        vm.prank(cuh);
+        uint256 amountCollected = liquidityManager.collect(
+            LiquidityManager.CollectParams({ tokenID: tokenID, recipient: cuh, amountRequested: 10 })
+        );
+        assertEq(amountCollected, 0);
+    }
+
+    function testIncreaseUninitialized() public {
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 8 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 8 ether);
+
+        vm.prank(cuh);
+        vm.expectRevert(LiquidityManager.UnauthorizedError.selector);
+        liquidityManager.increaseLiquidity(
+            LiquidityManager.IncreaseLiquidityParams({
+                tokenID: 2,
+                amount0: 1 ether,
+                amount1: 8 ether,
+                liquidity: 1 ether,
+                deadline: 365 days + 2
+            })
+        );
+    }
+
+    function testStaggerDepositSameOwner() public {
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        mint(address(this), 5 ether);
+        pair.burn(address(dennis), 0.5 ether, 4 ether, 0.5 ether);
+        vm.warp(365 days + 1);
+
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 8 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 8 ether);
+
+        vm.prank(cuh);
+        liquidityManager.increaseLiquidity(
+            LiquidityManager.IncreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0: 1 ether,
+                amount1: 8 ether,
+                liquidity: 1 ether,
+                deadline: 365 days + 2
+            })
+        );
+        vm.warp(730 days + 1);
+
+        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
+        uint256 dilutionLP2 = ((0.5 ether - dilutionLP) * lendgine.getBorrowRate(0.5 ether - dilutionLP, 2 ether)) /
+            1 ether;
+
+        vm.prank(cuh);
+        uint256 amountCollected = liquidityManager.collect(
+            LiquidityManager.CollectParams({
+                tokenID: tokenID,
+                recipient: cuh,
+                amountRequested: dilutionLP * 10 + dilutionLP2 * 10
+            })
+        );
+
+        assertEq(lendgine.totalLiquidity(), 2 ether);
+        assertPosition(tokenID, cuh, key, 2 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
+        assertEq(lendgine.rewardPerLiquidityStored(), dilutionLP * 10 + dilutionLP2 * 5);
+        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
+        assertEq(amountCollected, dilutionLP * 10 + dilutionLP2 * 10);
+
+        uint256 collateral = lendgine.convertLiquidityToAsset(lendgine.convertShareToLiquidity(0.5 ether));
+        assertEq(speculative.balanceOf(address(lendgine)), collateral);
+    }
+
+    function testStaggerDepositDifferentOwner() public {
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        mint(address(this), 5 ether);
+        pair.burn(address(this), 0.5 ether, 4 ether, 0.5 ether);
+        vm.warp(365 days + 1);
+
+        uint256 tokenID2 = mintLiq(dennis, 1 ether, 8 ether, 1 ether, 365 days + 2);
+
+        assertFalse(tokenID == tokenID2);
+
+        vm.warp(730 days + 1);
+
+        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
+        uint256 dilutionLP2 = ((0.5 ether - dilutionLP) * lendgine.getBorrowRate(0.5 ether - dilutionLP, 2 ether)) /
+            1 ether;
+
+        assertEq(lendgine.totalLiquidity(), 2 ether);
+        assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
+        assertPosition(tokenID2, dennis, key, 1 ether, dilutionLP * 10, 0);
+
+        vm.prank(cuh);
+        uint256 amountCollected = liquidityManager.collect(
+            LiquidityManager.CollectParams({
+                tokenID: tokenID,
+                recipient: cuh,
+                amountRequested: dilutionLP * 10 + dilutionLP2 * 5
+            })
+        );
+
+        assertPosition(tokenID, cuh, key, 1 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
+        assertEq(amountCollected, dilutionLP * 10 + dilutionLP2 * 5);
+
+        vm.prank(dennis);
+        amountCollected = liquidityManager.collect(
+            LiquidityManager.CollectParams({ tokenID: tokenID2, recipient: dennis, amountRequested: dilutionLP2 * 5 })
+        );
+        assertPosition(tokenID2, dennis, key, 1 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
+        assertEq(amountCollected, dilutionLP2 * 5);
+    }
 }
