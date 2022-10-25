@@ -284,7 +284,6 @@ contract LiquidityManager {
         position.tokensOwed -= amount;
 
         uint256 amountSent = Lendgine(lendgine).collect(params.recipient, amount);
-
         if (amountSent < amount) revert CollectError();
 
         emit Collect(params.tokenID, amount);
