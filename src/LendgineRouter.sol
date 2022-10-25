@@ -4,14 +4,11 @@ pragma solidity ^0.8.4;
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
+import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
+import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
-
-import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
-
-import "forge-std/console2.sol";
 
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)

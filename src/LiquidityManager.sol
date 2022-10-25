@@ -9,7 +9,7 @@ import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
-import "forge-std/console2.sol";
+import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
 /// @notice Wraps Numoen liquidity positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
@@ -127,10 +127,8 @@ contract LiquidityManager {
         SafeTransferLib.safeTransferFrom(params.base, msg.sender, _pair, params.amount0);
         SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, _pair, params.amount1);
         Pair(_pair).mint(params.liquidity);
-
-        // if (liquidity != params.liquidity) revert SlippageError();
-
         Lendgine(lendgine).deposit(address(this));
+
         uint80 lendgineID = cacheLendgineKey(lendgine, lendgineKey);
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
@@ -156,6 +154,9 @@ contract LiquidityManager {
     function increaseLiquidity(IncreaseLiquidityParams calldata params) external checkDeadline(params.deadline) {
         Position storage position = _positions[params.tokenID];
 
+        if (msg.sender != position.operator) revert UnauthorizedError();
+        if (position.lendgineID == 0) revert PositionInvalidError();
+
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
         address lendgine = LendgineAddress.computeAddress(
@@ -171,17 +172,14 @@ contract LiquidityManager {
         SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, _pair, params.amount0);
         SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, _pair, params.amount1);
         Pair(_pair).mint(params.liquidity);
-
-        // if (liquidity != params.liquidityMin) revert SlippageError();
-
         Lendgine(lendgine).deposit(address(this));
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
-        position.tokensOwed +=
-            (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
-            (1 ether);
-
+        position.tokensOwed += PRBMathUD60x18.mul(
+            position.liquidity,
+            rewardPerLiquidityPaid - position.rewardPerLiquidityPaid
+        );
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
         position.liquidity += params.liquidity;
 
@@ -201,6 +199,7 @@ contract LiquidityManager {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
+        if (position.lendgineID == 0) revert PositionInvalidError();
 
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
@@ -219,9 +218,10 @@ contract LiquidityManager {
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
-        position.tokensOwed +=
-            (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
-            (1 ether);
+        position.tokensOwed += PRBMathUD60x18.mul(
+            position.liquidity,
+            rewardPerLiquidityPaid - position.rewardPerLiquidityPaid
+        );
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
         position.liquidity -= params.liquidity;
 
@@ -253,9 +253,10 @@ contract LiquidityManager {
         Lendgine(lendgine).accruePositionInterest();
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
-        position.tokensOwed +=
-            (position.liquidity * (rewardPerLiquidityPaid - position.rewardPerLiquidityPaid)) /
-            (1 ether);
+        position.tokensOwed += PRBMathUD60x18.mul(
+            position.liquidity,
+            rewardPerLiquidityPaid - position.rewardPerLiquidityPaid
+        );
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
 
         amount = params.amountRequested > position.tokensOwed ? position.tokensOwed : params.amountRequested;

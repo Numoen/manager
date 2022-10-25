@@ -75,6 +75,52 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         );
     }
 
+    function assertPosition(
+        uint256 tokenID,
+        address operator,
+        LendgineAddress.LendgineKey memory key,
+        uint256 liquidity,
+        uint256 rewardPerLiquidityPaid,
+        uint256 tokensOwed
+    ) public {
+        {
+            (
+                ,
+                address _base,
+                address _speculative,
+                uint256 _baseScaleFactor,
+                uint256 _speculativeScaleFactor,
+                uint256 _upperBound,
+                ,
+                ,
+
+            ) = liquidityManager.getPosition(tokenID);
+            assertEq(key.base, _base);
+            assertEq(key.speculative, _speculative);
+            assertEq(key.baseScaleFactor, _baseScaleFactor);
+            assertEq(key.speculativeScaleFactor, _speculativeScaleFactor);
+            assertEq(key.upperBound, _upperBound);
+        }
+        {
+            (
+                address _operator,
+                ,
+                ,
+                ,
+                ,
+                ,
+                uint256 _liquidity,
+                uint256 _rewardPerLiquidityPaid,
+                uint256 _tokensOwed
+            ) = liquidityManager.getPosition(tokenID);
+
+            assertEq(operator, _operator);
+            assertEq(liquidity, _liquidity);
+            assertEq(rewardPerLiquidityPaid, _rewardPerLiquidityPaid);
+            assertEq(tokensOwed, _tokensOwed);
+        }
+    }
+
     constructor() {
         base = new MockERC20();
         speculative = new MockERC20();
@@ -100,26 +146,9 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     function testMintBasic() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
-        (
-            address _operator,
-            address _base,
-            address _speculative,
-            uint256 _baseScaleFactor,
-            uint256 _speculativeScaleFactor,
-            uint256 _upperBound,
-            uint256 _liquidity,
-            uint256 _rewardPerLiquidityPaid,
-            uint256 _tokensOwed
-        ) = liquidityManager.getPosition(tokenID);
-
         assertEq(tokenID, 1);
-        assertEq(_operator, cuh);
-        assertEq(address(base), _base);
-        assertEq(address(speculative), _speculative);
-        assertEq(upperBound, _upperBound);
-        assertEq(_liquidity, 1 ether);
-        assertEq(_rewardPerLiquidityPaid, 0);
-        assertEq(_tokensOwed, 0);
+
+        assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
     }
 
     // test double mint
@@ -147,35 +176,17 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             })
         );
 
-        (
-            address _operator,
-            address _base,
-            address _speculative,
-            uint256 _baseScaleFactor,
-            uint256 _speculativeScaleFactor,
-            uint256 _upperBound,
-            uint256 _liquidity,
-            uint256 _rewardPerLiquidityPaid,
-            uint256 _tokensOwed
-        ) = liquidityManager.getPosition(tokenID);
-
-        assertEq(_operator, cuh);
-        assertEq(address(base), _base);
-        assertEq(address(speculative), _speculative);
-        assertEq(upperBound, _upperBound);
-        assertEq(_liquidity, 2 ether);
-        assertEq(_rewardPerLiquidityPaid, 0);
-        assertEq(_tokensOwed, 0);
+        assertPosition(tokenID, cuh, key, 2 ether, 0, 0);
     }
 
     function testIncreaseInterest() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
-        mint(address(this), 1 ether);
+        mint(address(this), 5 ether);
 
-        vm.warp(1 days + 1);
+        vm.warp(365 days + 1);
 
-        uint256 dilution = 0.1 ether / 10000;
+        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 8 ether);
@@ -193,29 +204,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 amount0: 1 ether,
                 amount1: 8 ether,
                 liquidity: 1 ether,
-                deadline: 1 days + 2
+                deadline: 365 days + 2
             })
         );
 
-        (
-            address _operator,
-            address _base,
-            address _speculative,
-            uint256 _baseScaleFactor,
-            uint256 _speculativeScaleFactor,
-            uint256 _upperBound,
-            uint256 _liquidity,
-            uint256 _rewardPerLiquidityPaid,
-            uint256 _tokensOwed
-        ) = liquidityManager.getPosition(tokenID);
-
-        assertEq(_operator, cuh);
-        assertEq(address(base), _base);
-        assertEq(address(speculative), _speculative);
-        assertEq(upperBound, _upperBound);
-        assertEq(_liquidity, 2 ether);
-        assertEq(_rewardPerLiquidityPaid, (dilution * 10));
-        assertEq(_tokensOwed, (dilution * 10));
+        assertPosition(tokenID, cuh, key, 2 ether, dilutionLP * 10, dilutionLP * 10);
     }
 
     function testDecreaseBasic() public {
@@ -257,11 +250,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     function testDecreaseInterest() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
-        mint(address(this), 1 ether);
+        mint(address(this), 5 ether);
 
-        vm.warp(1 days + 1);
+        vm.warp(365 days + 1);
 
-        uint256 dilution = 0.1 ether / 10000;
+        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
         vm.prank(cuh);
         liquidityManager.decreaseLiquidity(
@@ -271,67 +264,31 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 amount1: 8_000_000,
                 liquidity: 1_000_000,
                 recipient: cuh,
-                deadline: 1 days + 2
+                deadline: 365 days + 2
             })
         );
 
-        (
-            address _operator,
-            address _base,
-            address _speculative,
-            uint256 _baseScaleFactor,
-            uint256 _speculativeScaleFactor,
-            uint256 _upperBound,
-            uint256 _liquidity,
-            uint256 _rewardPerLiquidityPaid,
-            uint256 _tokensOwed
-        ) = liquidityManager.getPosition(tokenID);
-
-        assertEq(_operator, cuh);
-        assertEq(address(base), _base);
-        assertEq(address(speculative), _speculative);
-        assertEq(upperBound, _upperBound);
-        assertEq(_liquidity, 1 ether - 1_000_000);
-        assertEq(_rewardPerLiquidityPaid, (dilution * 10));
-        assertEq(_tokensOwed, (dilution * 10));
+        assertPosition(tokenID, cuh, key, 1 ether - 1_000_000, dilutionLP * 10, dilutionLP * 10);
     }
 
     function testCollectBasic() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
 
-        mint(address(this), 1 ether);
+        mint(address(this), 5 ether);
 
-        vm.warp(1 days + 1);
+        vm.warp(365 days + 1);
 
-        uint256 dilution = 0.1 ether / 10000;
+        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
         vm.prank(cuh);
         liquidityManager.collect(
-            LiquidityManager.CollectParams({ tokenID: tokenID, recipient: cuh, amountRequested: (dilution * 10) })
+            LiquidityManager.CollectParams({ tokenID: tokenID, recipient: cuh, amountRequested: dilutionLP * 10 })
         );
 
         assertEq(speculative.balanceOf(address(liquidityManager)), 0);
-        assertEq(speculative.balanceOf(cuh), (dilution * 10));
+        assertEq(speculative.balanceOf(cuh), dilutionLP * 10);
 
-        (
-            address _operator,
-            address _base,
-            address _speculative,
-            uint256 _baseScaleFactor,
-            uint256 _speculativeScaleFactor,
-            uint256 _upperBound,
-            uint256 _liquidity,
-            uint256 _rewardPerLiquidityPaid,
-            uint256 _tokensOwed
-        ) = liquidityManager.getPosition(tokenID);
-
-        assertEq(_operator, cuh);
-        assertEq(address(base), _base);
-        assertEq(address(speculative), _speculative);
-        assertEq(upperBound, _upperBound);
-        assertEq(_liquidity, 1 ether);
-        assertEq(_rewardPerLiquidityPaid, (dilution * 10));
-        assertEq(_tokensOwed, 0);
+        assertPosition(tokenID, cuh, key, 1 ether, dilutionLP * 10, 0);
     }
 
     // test double collect
