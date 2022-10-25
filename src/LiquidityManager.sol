@@ -10,8 +10,6 @@ import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
-import "forge-std/console2.sol";
-
 /// @notice Wraps Numoen liquidity positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
 /// @author Modified from Uniswap
