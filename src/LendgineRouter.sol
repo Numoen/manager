@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.0;
 
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
@@ -9,8 +9,7 @@ import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
-
-import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
+import { NumoenLibrary } from "./libraries/NumoenLibrary.sol";
 
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
@@ -189,7 +188,7 @@ contract LendgineRouter is IMintCallback {
         uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
         if (liquidity > params.liquidityMax) revert SlippageError();
 
-        (amountBIn, amountSIn) = priceToReserves(params.price, liquidity, Pair(pair).upperBound());
+        (amountBIn, amountSIn) = NumoenLibrary.priceToReserves(params.price, liquidity, Pair(pair).upperBound());
 
         SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, amountBIn);
         SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, amountSIn);
@@ -200,17 +199,5 @@ contract LendgineRouter is IMintCallback {
         Lendgine(lendgine).burn(params.recipient);
 
         emit Burn(msg.sender, lendgine, params.shares, amountBIn, amountSIn, liquidity);
-    }
-
-    // TODO: add this to a library
-    function priceToReserves(
-        uint256 price,
-        uint256 liquidity,
-        uint256 upperBound
-    ) public pure returns (uint256 r0, uint256 r1) {
-        uint256 scale0 = PRBMathUD60x18.powu(price, 2);
-        uint256 scale1 = 2 * (upperBound - price);
-
-        return (PRBMathUD60x18.mul(scale0, liquidity), PRBMathUD60x18.mul(scale1, liquidity));
     }
 }
