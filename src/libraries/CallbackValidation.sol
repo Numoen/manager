@@ -1,29 +1,31 @@
-pragma solidity ^0.8.4;
+// SPDX-License-Identifier: GPL-3.0-only
+pragma solidity ^0.8.0;
 
-import { Lendgine } from "numoen-core/Lendgine.sol";
-import { Factory } from "numoen-core/Factory.sol";
+import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { ILendgine } from "numoen-core/interfaces/ILendgine.sol";
 
-import { LendgineAddress } from "./LendgineAddress.sol";
-
+/// @notice Provides validation for callbacks from Numoen Lendgines
+/// @author Kyle Scott (https://github.com/Numoen/manager/blob/master/src/libraries/CallbackValidation.sol)
+/// @author Modified from Uniswap
+/// (https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/PoolAddress.sol)
 library CallbackValidation {
     error VerifyError();
 
-    function verifyCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey) internal view {
-        address lendgine = Factory(factory).getLendgine(
-            lendgineKey.base,
-            lendgineKey.speculative,
-            lendgineKey.upperBound
+    function verifyCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey)
+        internal
+        view
+        returns (ILendgine lendgine)
+    {
+        lendgine = ILendgine(
+            LendgineAddress.computeLendgineAddress(
+                factory,
+                lendgineKey.base,
+                lendgineKey.speculative,
+                lendgineKey.baseScaleFactor,
+                lendgineKey.speculativeScaleFactor,
+                lendgineKey.upperBound
+            )
         );
-        if (msg.sender != lendgine) revert VerifyError();
-    }
-
-    function verifyPairCallback(address factory, LendgineAddress.LendgineKey memory lendgineKey) internal view {
-        address lendgine = Factory(factory).getLendgine(
-            lendgineKey.base,
-            lendgineKey.speculative,
-            lendgineKey.upperBound
-        );
-        address pair = Lendgine(lendgine).pair();
-        if (msg.sender != pair) revert VerifyError();
+        if (msg.sender != address(lendgine)) revert VerifyError();
     }
 }
