@@ -97,8 +97,7 @@ contract LendgineRouter is IMintCallback {
         uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 liquidity;
-        uint256 amountBOut;
-        uint256 amountSOut;
+        uint256 price;
         uint256 sharesMin;
         address recipient;
         uint256 deadline;
@@ -141,9 +140,14 @@ contract LendgineRouter is IMintCallback {
         );
         if (shares < params.sharesMin) revert SlippageError();
 
-        Pair(pair).burn(params.recipient, params.amountBOut, params.amountSOut, params.liquidity);
+        (uint256 amountBOut, uint256 amountSOut) = NumoenLibrary.priceToReserves(
+            params.price,
+            params.liquidity,
+            params.upperBound
+        );
+        Pair(pair).burn(params.recipient, amountBOut, amountSOut, params.liquidity);
 
-        emit Mint(params.recipient, lendgine, shares, params.amountBOut, params.amountSOut, params.liquidity);
+        emit Mint(params.recipient, lendgine, shares, amountBOut, amountSOut, params.liquidity);
     }
 
     struct BurnParams {

@@ -15,76 +15,47 @@ library NumoenLibrary {
         return (PRBMathUD60x18.mul(scale0, liquidity), PRBMathUD60x18.mul(scale1, liquidity));
     }
 
-    /// @dev uses r0 first then r1 if r0 is zero
+    /// @dev Assumes a valid set of reserves and liquidity
     function reservesToPrice(
-        uint256 r0,
         uint256 r1,
         uint256 liquidity,
         uint256 upperBound
     ) internal pure returns (uint256 price) {
-        if (r0 == 0) {
-            uint256 scale0 = PRBMathUD60x18.div(r0, liquidity);
-            return PRBMathUD60x18.sqrt(scale0);
-        } else {
-            uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
-            return upperBound - scale1 / 2;
-        }
+        uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
+        return upperBound - scale1 / 2;
     }
 
-    // TODO: do these functions need to be scaled?
-    function getBaseOutExactIn(
-        uint256 amountSIn,
-        uint256 r0,
-        uint256 r1,
-        uint256 upperBound
-    ) internal pure returns (uint256 amountBOut) {
-        uint256 a = PRBMathUD60x18.mul(amountSIn, upperBound);
-        uint256 b = PRBMathUD60x18.powu(amountSIn, 2) / 4;
-        uint256 c = PRBMathUD60x18.mul(amountSIn, r1) / 2;
-
-        amountBOut = a - b - c;
-    }
-
-    function getSpeculativeOutExactIn(
-        uint256 amountBIn,
-        uint256 r0,
-        uint256 r1,
-        uint256 upperBound
-    ) internal pure returns (uint256 amountSOut) {
-        uint256 a = 2 * upperBound - r1;
-        uint256 b = 4 * amountBIn;
-        uint256 c = PRBMathUD60x18.sqrt(PRBMathUD60x18.powu(a, 2) + b);
-
-        amountSOut = c - a;
-    }
-
-    function getSpeculativeInExactOut(
-        uint256 amountBOut,
-        uint256 r0,
-        uint256 r1,
-        uint256 upperBound
-    ) internal pure returns (uint256 amountSIn) {
-        uint256 a = 2 * upperBound - r1;
-        uint256 b = 4 * amountBOut;
-        uint256 c = PRBMathUD60x18.sqrt(PRBMathUD60x18.powu(a, 2) - b);
-
-        amountSIn = a - c;
-    }
-
-    function getBaseInExactOut(
+    /// @dev Assumes a valid set of reserves and liquidity
+    function getBaseIn(
         uint256 amountSOut,
-        uint256 r0,
         uint256 r1,
+        uint256 liquidity,
         uint256 upperBound
     ) internal pure returns (uint256 amountBIn) {
-        uint256 a = PRBMathUD60x18.mul(amountSOut, upperBound);
-        uint256 b = PRBMathUD60x18.powu(amountSOut, 2) / 4;
-        uint256 c = PRBMathUD60x18.mul(amountSOut, r1) / 2;
+        uint256 scaleSOut = PRBMathUD60x18.div(amountSOut, liquidity);
+        uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
 
-        amountBIn = a + b - c;
+        uint256 a = PRBMathUD60x18.mul(scaleSOut, upperBound);
+        uint256 b = PRBMathUD60x18.powu(scaleSOut, 2) / 4;
+        uint256 c = PRBMathUD60x18.mul(scaleSOut, scale1) / 2;
+
+        amountBIn = PRBMathUD60x18.mul(a + b - c, liquidity);
     }
 
-    // function getAmountIn();
+    /// @dev Assumes a valid set of reserves and liquidity
+    function getBaseOut(
+        uint256 amountSIn,
+        uint256 r1,
+        uint256 liquidity,
+        uint256 upperBound
+    ) internal pure returns (uint256 amountBOut) {
+        uint256 scaleSIn = PRBMathUD60x18.div(amountSIn, liquidity);
+        uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
 
-    // function getAmountOut();
+        uint256 a = PRBMathUD60x18.mul(scaleSIn, upperBound);
+        uint256 b = PRBMathUD60x18.powu(scaleSIn, 2) / 4;
+        uint256 c = PRBMathUD60x18.mul(scaleSIn, scale1) / 2;
+
+        amountBOut = PRBMathUD60x18.mul(a - b - c, liquidity);
+    }
 }

@@ -47,11 +47,11 @@ contract LiquidityManagerTest is Test {
     function mint(
         address spender,
         uint256 liquidity,
-        uint256 amountBOut,
-        uint256 amountSOut,
+        uint256 price,
         uint256 deadline
     ) public returns (address _lendgine, uint256 _shares) {
         uint256 amount = Lendgine(lendgine).convertLiquidityToAsset(liquidity);
+        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(liquidity);
         speculative.mint(spender, amount);
 
         vm.prank(spender);
@@ -66,9 +66,8 @@ contract LiquidityManagerTest is Test {
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
                 liquidity: liquidity,
-                sharesMin: 0,
-                amountBOut: amountBOut,
-                amountSOut: amountSOut,
+                sharesMin: shares,
+                price: price,
                 recipient: spender,
                 deadline: deadline
             })
@@ -127,15 +126,15 @@ contract LiquidityManagerTest is Test {
 
     function testMintBasic() public {
         mintLiq(address(this), 100 ether, 800 ether, 100 ether, 2);
-        (address _lendgine, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 8 ether, 2);
+        (address _lendgine, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 2);
 
-        assertEq(base.balanceOf(cuh), 2.5 ether);
+        assertEq(base.balanceOf(cuh), 1 ether);
 
-        assertEq(lendgine.balanceOf(cuh), 0.1 ether);
+        assertEq(lendgine.balanceOf(cuh), 1 ether);
         assertEq(address(lendgine), _lendgine);
-        assertEq(_shares, 0.1 ether);
+        assertEq(_shares, 1 ether);
 
-        assertEq(pair.totalSupply(), 99.9 ether);
+        assertEq(pair.totalSupply(), 99 ether);
         assertEq(pair.buffer(), 0);
 
         assertEq(base.balanceOf(address(lendgineRouter)), 0);
@@ -144,15 +143,19 @@ contract LiquidityManagerTest is Test {
 
     function testBurnBasic() public {
         mintLiq(address(this), 10 ether, 80 ether, 10 ether, 2);
-        mint(cuh, 1 ether, 1 ether, 8 ether, 2);
+        mint(cuh, 1 ether, 1 ether, 2);
 
-        base.mint(cuh, 2.5 ether);
-
-        vm.prank(cuh);
-        base.approve(address(lendgineRouter), 2.5 ether);
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 8 ether);
 
         vm.prank(cuh);
-        lendgine.approve(address(lendgineRouter), 0.1 ether);
+        base.approve(address(lendgineRouter), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(lendgineRouter), 8 ether);
+
+        vm.prank(cuh);
+        lendgine.approve(address(lendgineRouter), 1 ether);
 
         vm.prank(cuh);
         (address _lendgine, uint256 _amountS, uint256 _amountB) = lendgineRouter.burn(
@@ -162,7 +165,7 @@ contract LiquidityManagerTest is Test {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                shares: 0.1 ether,
+                shares: 1 ether,
                 liquidityMax: 1 ether,
                 price: 1 ether,
                 recipient: cuh,
@@ -170,9 +173,8 @@ contract LiquidityManagerTest is Test {
             })
         );
 
-        assertEq(speculative.balanceOf(cuh), _amountS);
         assertEq(_amountS, 1 ether);
-        assertEq(_amountB, 2.5 ether);
+        assertEq(_amountB, 8 ether);
 
         assertEq(address(lendgine), _lendgine);
         assertEq(lendgine.balanceOf(cuh), 0);
