@@ -5,7 +5,7 @@ import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 import { ILendgine } from "numoen-core/interfaces/ILendgine.sol";
 
 /// @notice Provides validation for callbacks from Numoen Lendgines
-/// @author Kyle Scott (https://github.com/Numoen/core/blob/master/src/libraries/LendgineAddress.sol)
+/// @author Kyle Scott (https://github.com/Numoen/manager/blob/master/src/libraries/CallbackValidation.sol)
 /// @author Modified from Uniswap
 /// (https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/PoolAddress.sol)
 library CallbackValidation {

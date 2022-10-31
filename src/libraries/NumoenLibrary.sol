@@ -3,7 +3,13 @@ pragma solidity ^0.8.0;
 
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
+/// @notice Helper functions for interacting with Numoen Core
+/// @author Kyle Scott (https://github.com/Numoen/manager/blob/master/src/libraries/NumoenLibrary.sol)
 library NumoenLibrary {
+    /// @notice Calculates the reserves of a pair given a price
+    /// @param price Exchange rate measured in base / speculative scaled by 1 ether
+    /// @param liquidity Amount of liquidity shares
+    /// @param upperBound Upper bound of the pair
     function priceToReserves(
         uint256 price,
         uint256 liquidity,
@@ -15,6 +21,10 @@ library NumoenLibrary {
         return (PRBMathUD60x18.mul(scale0, liquidity), PRBMathUD60x18.mul(scale1, liquidity));
     }
 
+    /// @notice Calculates the price of a pair given reserves
+    /// @param r1 Amount of speculative asset
+    /// @param liquidity Amount of liquidity shares
+    /// @param upperBound Upper bound of the pair
     /// @dev Assumes a valid set of reserves and liquidity
     function reservesToPrice(
         uint256 r1,
@@ -25,6 +35,11 @@ library NumoenLibrary {
         return upperBound - scale1 / 2;
     }
 
+    /// @notice Calculates the amount of base tokens in for a given amount of speculative tokens to be received
+    /// @param amountSOut Amount of speculative tokens requested
+    /// @param r1 Amount of speculative asset in the pair
+    /// @param liquidity Amount of liquidity shares
+    /// @param upperBound Upper bound of the pair
     /// @dev Assumes a valid set of reserves and liquidity
     function getBaseIn(
         uint256 amountSOut,
@@ -42,6 +57,11 @@ library NumoenLibrary {
         amountBIn = PRBMathUD60x18.mul(a + b - c, liquidity);
     }
 
+    /// @notice Calculates the amount of base tokens out for a given amount of speculative tokens to be sold
+    /// @param amountSIn Amount of speculative tokens to be traded in
+    /// @param r1 Amount of speculative asset in the pair
+    /// @param liquidity Amount of liquidity shares
+    /// @param upperBound Upper bound of the pair
     /// @dev Assumes a valid set of reserves and liquidity
     function getBaseOut(
         uint256 amountSIn,
