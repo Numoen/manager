@@ -5,7 +5,7 @@ import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
@@ -89,7 +89,6 @@ contract LendgineRouter is IMintCallback {
                                  LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    // TODO: use price instead
     struct MintParams {
         address base;
         address speculative;

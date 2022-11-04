@@ -6,7 +6,7 @@ import { LiquidityManager } from "../src/LiquidityManager.sol";
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { CallbackHelper } from "./utils/CallbackHelper.sol";
@@ -23,7 +23,7 @@ contract LiquidityManagerTest is Test {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory;
+    Factory public factory = Factory(0x2A4a8ea165aa1d7F45d7ac03BFd6Fa58F9F5F8CC);
     Lendgine public lendgine;
     Pair public pair;
 
@@ -108,8 +108,6 @@ contract LiquidityManagerTest is Test {
     }
 
     function setUp() public {
-        factory = new Factory();
-
         (address _lendgine, address _pair) = factory.createLendgine(
             address(base),
             address(speculative),
@@ -125,8 +123,8 @@ contract LiquidityManagerTest is Test {
     }
 
     function testMintBasic() public {
-        mintLiq(address(this), 100 ether, 800 ether, 100 ether, 2);
-        (address _lendgine, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 2);
+        mintLiq(address(this), 100 ether, 800 ether, 100 ether, block.timestamp);
+        (address _lendgine, uint256 _shares) = mint(cuh, 1 ether, 1 ether, block.timestamp);
 
         assertEq(base.balanceOf(cuh), 1 ether);
 
@@ -142,8 +140,8 @@ contract LiquidityManagerTest is Test {
     }
 
     function testBurnBasic() public {
-        mintLiq(address(this), 10 ether, 80 ether, 10 ether, 2);
-        mint(cuh, 1 ether, 1 ether, 2);
+        mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
+        mint(cuh, 1 ether, 1 ether, block.timestamp);
 
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 8 ether);
@@ -169,7 +167,7 @@ contract LiquidityManagerTest is Test {
                 liquidityMax: 1 ether,
                 price: 1 ether,
                 recipient: cuh,
-                deadline: 2
+                deadline: block.timestamp
             })
         );
 

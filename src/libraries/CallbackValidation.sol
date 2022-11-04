@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.0;
 
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "./LendgineAddress.sol";
 import { ILendgine } from "numoen-core/interfaces/ILendgine.sol";
 
 /// @notice Provides validation for callbacks from Numoen Lendgines

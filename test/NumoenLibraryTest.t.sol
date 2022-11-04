@@ -22,7 +22,7 @@ contract NumoenLibraryTest is Test {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory;
+    Factory public factory = Factory(0x2A4a8ea165aa1d7F45d7ac03BFd6Fa58F9F5F8CC);
     Lendgine public lendgine;
     Pair public pair;
 
@@ -76,8 +76,6 @@ contract NumoenLibraryTest is Test {
     }
 
     function setUp() public {
-        factory = new Factory();
-
         (address _lendgine, address _pair) = factory.createLendgine(
             address(base),
             address(speculative),

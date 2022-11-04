@@ -3,10 +3,10 @@ pragma solidity ^0.8.0;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
