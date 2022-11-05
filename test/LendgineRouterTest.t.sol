@@ -150,50 +150,44 @@ contract LiquidityManagerTest is Test {
         assertEq(address(lendgine), _lendgine);
         assertEq(base.balanceOf(address(lendgineRouter)), 0);
         assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
+        assertEq(pair.buffer(), 0);
     }
 
-    // function testBurnBasic() public {
-    //     mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
-    //     mint(cuh, 1 ether, 1 ether, block.timestamp);
+    function testBurnBasic() public {
+        mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
+        (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
 
-    //     base.mint(cuh, 1 ether);
-    //     speculative.mint(cuh, 8 ether);
+        uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
 
-    //     vm.prank(cuh);
-    //     base.approve(address(lendgineRouter), 1 ether);
+        vm.prank(cuh);
+        lendgine.approve(address(lendgineRouter), _shares);
 
-    //     vm.prank(cuh);
-    //     speculative.approve(address(lendgineRouter), 8 ether);
+        vm.prank(cuh);
+        address _lendgine = lendgineRouter.burn(
+            LendgineRouter.BurnParams({
+                base: address(base),
+                speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
+                upperBound: upperBound,
+                shares: _shares,
+                liquidityMax: liquidity,
+                price: 1 ether,
+                recipient: cuh,
+                deadline: block.timestamp
+            })
+        );
 
-    //     vm.prank(cuh);
-    //     lendgine.approve(address(lendgineRouter), 1 ether);
+        // assertEq(_amountS, 1 ether);
+        // assertEq(_amountB, 8 ether);
 
-    //     vm.prank(cuh);
-    //     (address _lendgine, uint256 _amountS, uint256 _amountB) = lendgineRouter.burn(
-    //         LendgineRouter.BurnParams({
-    //             base: address(base),
-    //             speculative: address(speculative),
-    //             baseScaleFactor: 18,
-    //             speculativeScaleFactor: 18,
-    //             upperBound: upperBound,
-    //             shares: 1 ether,
-    //             liquidityMax: 1 ether,
-    //             price: 1 ether,
-    //             recipient: cuh,
-    //             deadline: block.timestamp
-    //         })
-    //     );
+        assertEq(address(lendgine), _lendgine);
+        // assertEq(lendgine.balanceOf(cuh), 0);
 
-    //     assertEq(_amountS, 1 ether);
-    //     assertEq(_amountB, 8 ether);
+        // assertEq(pair.totalSupply(), 10 ether);
+        assertEq(pair.buffer(), 0);
 
-    //     assertEq(address(lendgine), _lendgine);
-    //     assertEq(lendgine.balanceOf(cuh), 0);
-
-    //     assertEq(pair.totalSupply(), 10 ether);
-    //     assertEq(pair.buffer(), 0);
-
-    //     assertEq(base.balanceOf(address(lendgineRouter)), 0);
-    //     assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
-    // }
+        // assertEq(base.balanceOf(address(lendgineRouter)), 0);
+        // assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
+    }
 }

@@ -5,34 +5,26 @@ import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
-import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
 import { NumoenLibrary } from "./libraries/NumoenLibrary.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "./interfaces/IUniswapV2Pair.sol";
-
-import "forge-std/console2.sol";
+import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
 
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
-contract LendgineRouter is IMintCallback {
+contract LendgineRouter is IMintCallback, IUniswapV2Callee {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
     event Mint(address indexed recipient, address indexed lendgine, uint256 shares, uint256 liquidity);
 
-    event Burn(
-        address indexed payer,
-        address indexed lendgine,
-        uint256 shares,
-        uint256 amountB,
-        uint256 amountS,
-        uint256 liquidity
-    );
+    event Burn(address indexed payer, address indexed lendgine, uint256 shares, uint256 liquidity);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -113,6 +105,46 @@ contract LendgineRouter is IMintCallback {
         );
     }
 
+    struct UniCallbackData {
+        address lendgine;
+        address pair;
+        address speculative;
+        address base;
+        uint256 liquidity;
+        uint256 repayAmount;
+        address recipient;
+    }
+
+    function uniswapV2Call(
+        address,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata data
+    ) external override {
+        UniCallbackData memory decoded = abi.decode(data, (UniCallbackData));
+
+        SafeTransferLib.safeTransfer(
+            decoded.base,
+            decoded.pair,
+            decoded.base < decoded.speculative ? amount0 : amount1
+        );
+        SafeTransferLib.safeTransfer(
+            decoded.speculative,
+            decoded.pair,
+            decoded.base < decoded.speculative ? amount1 : amount0
+        );
+
+        Pair(decoded.pair).mint(decoded.liquidity);
+        Lendgine(decoded.lendgine).burn(address(this));
+
+        SafeTransferLib.safeTransfer(decoded.speculative, msg.sender, decoded.repayAmount);
+        SafeTransferLib.safeTransfer(
+            decoded.speculative,
+            decoded.recipient,
+            Lendgine(decoded.lendgine).convertLiquidityToAsset(decoded.liquidity) - decoded.repayAmount
+        );
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -156,7 +188,7 @@ contract LendgineRouter is IMintCallback {
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
         uint256 speculativeAmount = Lendgine(lendgine).convertLiquidityToAsset(params.liquidity);
         uint256 borrowAmount = determineBorrowAmount(
-            MathParams({
+            MathParams0({
                 speculativeAmount: speculativeAmount,
                 upperBound: params.upperBound,
                 price: params.price,
@@ -195,15 +227,7 @@ contract LendgineRouter is IMintCallback {
         uint256 deadline;
     }
 
-    function burn(BurnParams calldata params)
-        external
-        checkDeadline(params.deadline)
-        returns (
-            address lendgine,
-            uint256 amountBIn,
-            uint256 amountSIn
-        )
-    {
+    function burn(BurnParams calldata params) external checkDeadline(params.deadline) returns (address lendgine) {
         lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             params.base,
@@ -221,34 +245,58 @@ contract LendgineRouter is IMintCallback {
             params.upperBound
         );
 
+        address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
         uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
+        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(params.price, liquidity, Pair(pair).upperBound());
+
         if (liquidity > params.liquidityMax) revert SlippageError();
-
-        (amountBIn, amountSIn) = NumoenLibrary.priceToReserves(params.price, liquidity, Pair(pair).upperBound());
-
-        SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, amountBIn);
-        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, amountSIn);
-
-        Pair(pair).mint(liquidity);
+        uint256 repayAmount;
+        {
+            (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
+            repayAmount = determineRepayAmount(
+                MathParams1({
+                    price: params.price,
+                    liquidity: liquidity,
+                    upperBound: params.upperBound,
+                    u0: params.base < params.speculative ? u0 : u1,
+                    u1: params.base < params.speculative ? u1 : u0
+                })
+            );
+        }
 
         Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
-        Lendgine(lendgine).burn(params.recipient);
+        IUniswapV2Pair(uniPair).swap(
+            params.base < params.speculative ? r0 : r1,
+            params.base < params.speculative ? r1 : r0,
+            address(this),
+            abi.encode(
+                UniCallbackData({
+                    lendgine: lendgine,
+                    pair: pair,
+                    speculative: params.speculative,
+                    base: params.base,
+                    liquidity: liquidity,
+                    repayAmount: repayAmount,
+                    recipient: params.recipient
+                })
+            )
+        );
 
-        emit Burn(msg.sender, lendgine, params.shares, amountBIn, amountSIn, liquidity);
+        emit Burn(msg.sender, lendgine, params.shares, liquidity);
     }
 
     /*//////////////////////////////////////////////////////////////
                             INTERNAL LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    struct MathParams {
+    struct MathParams0 {
         uint256 speculativeAmount;
         uint256 upperBound;
         uint256 price;
         uint256 slippageBps;
     }
 
-    function determineBorrowAmount(MathParams memory params) internal pure returns (uint256) {
+    function determineBorrowAmount(MathParams0 memory params) internal pure returns (uint256) {
         uint256 x0 = PRBMathUD60x18.powu(params.price, 2);
         uint256 x1 = (params.upperBound - params.price) * 2;
 
@@ -260,6 +308,24 @@ contract LendgineRouter is IMintCallback {
             params.upperBound -
             (((10000 - params.slippageBps) * PRBMathUD60x18.div(x0, params.price)) / 10000) -
             x1;
+
+        return PRBMathUD60x18.div(numerator, denominator);
+    }
+
+    struct MathParams1 {
+        uint256 liquidity;
+        uint256 upperBound;
+        uint256 price;
+        uint256 u0;
+        uint256 u1;
+    }
+
+    function determineRepayAmount(MathParams1 memory params) internal pure returns (uint256) {
+        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(params.price, params.liquidity, params.upperBound);
+
+        uint256 numerator = 1000 *
+            (PRBMathUD60x18.mul(params.u0, r1) + PRBMathUD60x18.mul(params.u1, r0) + PRBMathUD60x18.mul(r0, r1));
+        uint256 denominator = 997 * (params.u0 - r0);
 
         return PRBMathUD60x18.div(numerator, denominator);
     }
