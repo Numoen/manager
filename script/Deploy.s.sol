@@ -13,8 +13,8 @@ contract DeployScript is Script {
         address uniFactory = 0x62d5b84bE28a183aBB507E125B384122D2C25fAE;
 
         uint256 pk = vm.envUint("PRIVATE_KEY");
-        vm.broadcast(pk);
-        new LiquidityManager(factory);
+        // vm.broadcast(pk);
+        // new LiquidityManager(factory);
 
         vm.broadcast(pk);
         new LendgineRouter(factory, uniFactory);

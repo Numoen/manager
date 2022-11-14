@@ -15,6 +15,8 @@ import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "./interfaces/IUniswapV2Pair.sol";
 import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
 
+import "forge-std/console2.sol";
+
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
 contract LendgineRouter is IMintCallback, IUniswapV2Callee {
@@ -97,6 +99,10 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         );
 
         SafeTransferLib.safeTransfer(decoded.key.speculative, msg.sender, amountSOut);
+        console2.log(amountS - sOut - amountSOut);
+        console2.log("amountS", amountS);
+        console2.log("sOut", sOut);
+        console2.log("amountSOut", amountSOut);
         SafeTransferLib.safeTransferFrom(
             decoded.key.speculative,
             decoded.payer,
@@ -157,6 +163,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 upperBound;
         uint256 liquidity;
         uint256 price;
+        uint256 borrowAmount;
         uint256 slippageBps;
         uint256 sharesMin;
         address recipient;
@@ -187,23 +194,16 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
         uint256 speculativeAmount = Lendgine(lendgine).convertLiquidityToAsset(params.liquidity);
-        uint256 borrowAmount = determineBorrowAmount(
-            MathParams0({
-                speculativeAmount: speculativeAmount,
-                upperBound: params.upperBound,
-                price: params.price,
-                slippageBps: params.slippageBps
-            })
-        );
+        console2.log("speculative amount", speculativeAmount);
 
         shares = Lendgine(lendgine).mint(
             params.recipient,
-            speculativeAmount + borrowAmount,
+            speculativeAmount + params.borrowAmount,
             abi.encode(
                 CallbackData({
                     key: lendgineKey,
                     uniPair: uniPair,
-                    borrowAmount: borrowAmount,
+                    borrowAmount: params.borrowAmount,
                     price: params.price,
                     payer: msg.sender
                 })
@@ -288,29 +288,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
     /*//////////////////////////////////////////////////////////////
                             INTERNAL LOGIC
     //////////////////////////////////////////////////////////////*/
-
-    struct MathParams0 {
-        uint256 speculativeAmount;
-        uint256 upperBound;
-        uint256 price;
-        uint256 slippageBps;
-    }
-
-    function determineBorrowAmount(MathParams0 memory params) internal pure returns (uint256) {
-        uint256 x0 = PRBMathUD60x18.powu(params.price, 2);
-        uint256 x1 = (params.upperBound - params.price) * 2;
-
-        uint256 numerator = PRBMathUD60x18.mul(x1, params.speculativeAmount) +
-            ((10000 - params.slippageBps) *
-                PRBMathUD60x18.div(PRBMathUD60x18.mul(x0, params.speculativeAmount), params.price)) /
-            10000;
-        uint256 denominator = 2 *
-            params.upperBound -
-            (((10000 - params.slippageBps) * PRBMathUD60x18.div(x0, params.price)) / 10000) -
-            x1;
-
-        return PRBMathUD60x18.div(numerator, denominator);
-    }
 
     struct MathParams1 {
         uint256 liquidity;

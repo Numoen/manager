@@ -78,4 +78,27 @@ library NumoenLibrary {
 
         amountBOut = PRBMathUD60x18.mul(a - b - c, liquidity);
     }
+
+    struct MathParams0 {
+        uint256 speculativeAmount;
+        uint256 upperBound;
+        uint256 price;
+        uint256 slippageBps;
+    }
+
+    function determineBorrowAmount(MathParams0 memory params) internal pure returns (uint256) {
+        uint256 x0 = PRBMathUD60x18.powu(params.price, 2);
+        uint256 x1 = (params.upperBound - params.price) * 2;
+
+        uint256 numerator = PRBMathUD60x18.mul(x1, params.speculativeAmount) +
+            ((10000 - params.slippageBps) *
+                PRBMathUD60x18.div(PRBMathUD60x18.mul(x0, params.speculativeAmount), params.price)) /
+            10000;
+        uint256 denominator = 2 *
+            params.upperBound -
+            (((10000 - params.slippageBps) * PRBMathUD60x18.div(x0, params.price)) / 10000) -
+            x1;
+
+        return PRBMathUD60x18.div(numerator, denominator);
+    }
 }

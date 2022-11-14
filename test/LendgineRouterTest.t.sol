@@ -60,6 +60,16 @@ contract LiquidityManagerTest is Test {
     ) public returns (address _lendgine, uint256 _shares) {
         uint256 amount = Lendgine(lendgine).convertLiquidityToAsset(liquidity);
         uint256 shares = Lendgine(lendgine).convertLiquidityToShare(liquidity);
+
+        uint256 borrowAmount = NumoenLibrary.determineBorrowAmount(
+            NumoenLibrary.MathParams0({
+                speculativeAmount: amount,
+                upperBound: upperBound,
+                price: price,
+                slippageBps: slippageBps
+            })
+        );
+        console2.log(borrowAmount);
         speculative.mint(spender, amount);
 
         vm.prank(spender);
@@ -75,6 +85,7 @@ contract LiquidityManagerTest is Test {
                 upperBound: upperBound,
                 liquidity: liquidity,
                 sharesMin: shares,
+                borrowAmount: borrowAmount,
                 price: price,
                 slippageBps: slippageBps,
                 recipient: spender,
