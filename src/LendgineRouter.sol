@@ -99,10 +99,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         );
 
         SafeTransferLib.safeTransfer(decoded.key.speculative, msg.sender, amountSOut);
-        console2.log(amountS - sOut - amountSOut);
-        console2.log("amountS", amountS);
-        console2.log("sOut", sOut);
-        console2.log("amountSOut", amountSOut);
         SafeTransferLib.safeTransferFrom(
             decoded.key.speculative,
             decoded.payer,
@@ -164,7 +160,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 liquidity;
         uint256 price;
         uint256 borrowAmount;
-        uint256 slippageBps;
         uint256 sharesMin;
         address recipient;
         uint256 deadline;
@@ -194,7 +189,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
         uint256 speculativeAmount = Lendgine(lendgine).convertLiquidityToAsset(params.liquidity);
-        console2.log("speculative amount", speculativeAmount);
 
         shares = Lendgine(lendgine).mint(
             params.recipient,
@@ -220,8 +214,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 baseScaleFactor;
         uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint256 shares;
-        uint256 liquidityMax;
+        uint256 liquidity;
         uint256 price;
         address recipient;
         uint256 deadline;
@@ -246,17 +239,22 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         );
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
-        uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(params.price, liquidity, Pair(pair).upperBound());
+        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(
+            params.price,
+            params.liquidity,
+            Pair(pair).upperBound()
+        );
+        console2.log(r0, r1);
+        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(params.liquidity);
 
-        if (liquidity > params.liquidityMax) revert SlippageError();
+        console2.log("shares", shares);
         uint256 repayAmount;
         {
             (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
             repayAmount = determineRepayAmount(
-                MathParams1({
+                RepayParams({
                     price: params.price,
-                    liquidity: liquidity,
+                    liquidity: params.liquidity,
                     upperBound: params.upperBound,
                     u0: params.base < params.speculative ? u0 : u1,
                     u1: params.base < params.speculative ? u1 : u0
@@ -264,7 +262,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
             );
         }
 
-        Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
+        Lendgine(lendgine).transferFrom(msg.sender, lendgine, shares);
         IUniswapV2Pair(uniPair).swap(
             params.base < params.speculative ? r0 : r1,
             params.base < params.speculative ? r1 : r0,
@@ -275,21 +273,21 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
                     pair: pair,
                     speculative: params.speculative,
                     base: params.base,
-                    liquidity: liquidity,
+                    liquidity: params.liquidity,
                     repayAmount: repayAmount,
                     recipient: params.recipient
                 })
             )
         );
 
-        emit Burn(msg.sender, lendgine, params.shares, liquidity);
+        emit Burn(msg.sender, lendgine, shares, params.liquidity);
     }
 
     /*//////////////////////////////////////////////////////////////
                             INTERNAL LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    struct MathParams1 {
+    struct RepayParams {
         uint256 liquidity;
         uint256 upperBound;
         uint256 price;
@@ -297,7 +295,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 u1;
     }
 
-    function determineRepayAmount(MathParams1 memory params) internal pure returns (uint256) {
+    function determineRepayAmount(RepayParams memory params) internal pure returns (uint256) {
         (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(params.price, params.liquidity, params.upperBound);
 
         uint256 numerator = 1000 *

@@ -87,7 +87,6 @@ contract LiquidityManagerTest is Test {
                 sharesMin: shares,
                 borrowAmount: borrowAmount,
                 price: price,
-                slippageBps: slippageBps,
                 recipient: spender,
                 deadline: deadline
             })
@@ -181,8 +180,7 @@ contract LiquidityManagerTest is Test {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                shares: _shares,
-                liquidityMax: liquidity,
+                liquidity: liquidity,
                 price: 1 ether,
                 recipient: cuh,
                 deadline: block.timestamp

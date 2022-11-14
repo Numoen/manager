@@ -58,31 +58,55 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 speculativeAmount: amountS,
                 upperBound: upperBound,
                 price: price,
-                slippageBps: 2000
+                slippageBps: 200
             })
         );
-        uint256 borrowAmountFilter = (borrowAmount / 10**6) * 10**6;
-        console2.log("out", borrowAmountFilter);
+        uint256 borrowAmountFilter = (borrowAmount / 10**9) * 10**9;
 
         uint256 liquidity = lendgine.convertAssetToLiquidity(amountS);
-        (uint256 amountBOut, uint256 amountSOut) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
-        console2.log("burn amounts", amountBOut, amountSOut);
-        console2.log(amountSOut + PRBMathUD60x18.mul(price, amountBOut));
+        console2.log(liquidity);
+        uint256 shares = lendgine.convertLiquidityToShare(liquidity);
+        console2.log(shares);
 
-        console2.log("totalAmount", amountS + borrowAmountFilter);
+        // vm.prank(cuh);
+        // lendgineRouter.mint(
+        //     LendgineRouter.MintParams({
+        //         base: address(cusd),
+        //         speculative: address(mobi),
+        //         baseScaleFactor: 18,
+        //         speculativeScaleFactor: 18,
+        //         upperBound: upperBound,
+        //         price: price,
+        //         liquidity: liquidity,
+        //         sharesMin: 0,
+        //         borrowAmount: borrowAmountFilter,
+        //         recipient: cuh,
+        //         deadline: block.timestamp + 60
+        //     })
+        // );
+
+        console2.log(lendgine.balanceOf(cuh));
+
         vm.prank(cuh);
-        lendgineRouter.mint(
-            LendgineRouter.MintParams({
+        lendgine.approve(address(lendgineRouter), 501 ether);
+        console2.log("pair", pair.totalSupply());
+        console2.log(ERC20(cusd).balanceOf(address(pair)), ERC20(mobi).balanceOf(address(pair)));
+
+        (uint256 p0, uint256 p1) = pair.balances();
+        console2.log(pair.buffer());
+
+        console2.log(pair.verifyInvariant(p0, p1, pair.totalSupply()));
+
+        vm.prank(cuh);
+        lendgineRouter.burn(
+            LendgineRouter.BurnParams({
                 base: address(cusd),
                 speculative: address(mobi),
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
                 price: price,
-                liquidity: liquidity,
-                sharesMin: 0,
-                borrowAmount: borrowAmountFilter,
-                slippageBps: 50,
+                liquidity: 500 ether,
                 recipient: cuh,
                 deadline: block.timestamp + 60
             })

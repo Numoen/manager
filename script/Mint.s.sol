@@ -41,7 +41,6 @@ contract DeployScript is Script {
                 liquidity: 5 ether,
                 borrowAmount: 8.95 ether,
                 sharesMin: 0,
-                slippageBps: 200,
                 recipient: vm.addr(pk),
                 deadline: block.timestamp + 60
             })
