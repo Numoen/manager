@@ -37,7 +37,6 @@ contract DeployScript is Script {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                price: 0.0002 ether,
                 liquidity: 5 ether,
                 borrowAmount: 8.95 ether,
                 sharesMin: 0,

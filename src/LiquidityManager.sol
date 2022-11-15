@@ -23,7 +23,7 @@ contract LiquidityManager {
 
     event IncreaseLiquidity(uint256 indexed tokenID, uint256 liquidity, uint256 amount0, uint256 amount1);
 
-    event DecreaseLiquidity(uint256 indexed tokenID, uint256 liquidity, uint256 amount0, uint256 amount1);
+    event DecreaseLiquidity(uint256 indexed tokenID, uint256 liquidity);
 
     event Collect(uint256 indexed tokenID, uint256 amount);
 
@@ -201,8 +201,6 @@ contract LiquidityManager {
 
     struct DecreaseLiquidityParams {
         uint256 tokenID;
-        uint256 amount0;
-        uint256 amount1;
         uint256 liquidity;
         address recipient;
         uint256 deadline;
@@ -234,7 +232,7 @@ contract LiquidityManager {
         );
 
         Lendgine(lendgine).withdraw(params.liquidity);
-        Pair(pair).burn(params.recipient, params.amount0, params.amount1, params.liquidity);
+        Pair(pair).burn(params.recipient, params.liquidity);
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
@@ -245,7 +243,7 @@ contract LiquidityManager {
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
         position.liquidity -= params.liquidity;
 
-        emit DecreaseLiquidity(params.tokenID, params.liquidity, params.amount0, params.amount1);
+        emit DecreaseLiquidity(params.tokenID, params.liquidity);
     }
 
     struct CollectParams {

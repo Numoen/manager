@@ -15,8 +15,6 @@ import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "./interfaces/IUniswapV2Pair.sol";
 import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
 
-import "forge-std/console2.sol";
-
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
 contract LendgineRouter is IMintCallback, IUniswapV2Callee {
@@ -71,8 +69,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
     struct CallbackData {
         LendgineAddress.LendgineKey key;
         address uniPair;
-        uint256 borrowAmount;
-        uint256 price;
         address payer;
     }
 
@@ -81,13 +77,8 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         CallbackValidation.verifyCallback(factory, decoded.key);
 
         uint256 liquidity = Lendgine(msg.sender).convertAssetToLiquidity(amountS);
-        (uint256 amountBOut, uint256 amountSOut) = NumoenLibrary.priceToReserves(
-            decoded.price,
-            liquidity,
-            decoded.key.upperBound
-        );
 
-        Pair(Lendgine(msg.sender).pair()).burn(address(this), amountBOut, amountSOut, liquidity);
+        (uint256 amountBOut, uint256 amountSOut) = Pair(Lendgine(msg.sender).pair()).burn(address(this), liquidity);
         SafeTransferLib.safeTransfer(decoded.key.base, decoded.uniPair, amountBOut);
 
         uint256 sOut = getSOut(amountBOut, decoded.uniPair, decoded.key.base < decoded.key.speculative);
@@ -158,7 +149,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 liquidity;
-        uint256 price;
         uint256 borrowAmount;
         uint256 sharesMin;
         address recipient;
@@ -193,15 +183,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         shares = Lendgine(lendgine).mint(
             params.recipient,
             speculativeAmount + params.borrowAmount,
-            abi.encode(
-                CallbackData({
-                    key: lendgineKey,
-                    uniPair: uniPair,
-                    borrowAmount: params.borrowAmount,
-                    price: params.price,
-                    payer: msg.sender
-                })
-            )
+            abi.encode(CallbackData({ key: lendgineKey, uniPair: uniPair, payer: msg.sender }))
         );
 
         if (shares < params.sharesMin) revert SlippageError();
@@ -215,7 +197,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 liquidity;
-        uint256 price;
         address recipient;
         uint256 deadline;
     }
@@ -238,29 +219,35 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
             params.upperBound
         );
 
-        address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(
-            params.price,
-            params.liquidity,
-            Pair(pair).upperBound()
-        );
-        console2.log(r0, r1);
-        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(params.liquidity);
+        uint256 r0;
+        uint256 r1;
+        {
+            (uint256 p0, uint256 p1) = Pair(pair).balances();
+            uint256 _totalSupply = Pair(pair).totalSupply();
+            // TODO: use full math
 
-        console2.log("shares", shares);
+            r0 = (p0 * params.liquidity) / _totalSupply;
+            r1 = (p1 * params.liquidity) / _totalSupply;
+        }
+
+        address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
         uint256 repayAmount;
         {
             (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
             repayAmount = determineRepayAmount(
                 RepayParams({
-                    price: params.price,
                     liquidity: params.liquidity,
                     upperBound: params.upperBound,
+                    r0: r0,
+                    r1: r1,
                     u0: params.base < params.speculative ? u0 : u1,
                     u1: params.base < params.speculative ? u1 : u0
                 })
             );
         }
+
+        Lendgine(lendgine).accrueInterest();
+        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(params.liquidity);
 
         Lendgine(lendgine).transferFrom(msg.sender, lendgine, shares);
         IUniswapV2Pair(uniPair).swap(
@@ -290,17 +277,18 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
     struct RepayParams {
         uint256 liquidity;
         uint256 upperBound;
-        uint256 price;
+        uint256 r0;
+        uint256 r1;
         uint256 u0;
         uint256 u1;
     }
 
     function determineRepayAmount(RepayParams memory params) internal pure returns (uint256) {
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(params.price, params.liquidity, params.upperBound);
-
         uint256 numerator = 1000 *
-            (PRBMathUD60x18.mul(params.u0, r1) + PRBMathUD60x18.mul(params.u1, r0) + PRBMathUD60x18.mul(r0, r1));
-        uint256 denominator = 997 * (params.u0 - r0);
+            (PRBMathUD60x18.mul(params.u0, params.r1) +
+                PRBMathUD60x18.mul(params.u1, params.r0) +
+                PRBMathUD60x18.mul(params.r0, params.r1));
+        uint256 denominator = 997 * (params.u0 - params.r0);
 
         return PRBMathUD60x18.div(numerator, denominator);
     }

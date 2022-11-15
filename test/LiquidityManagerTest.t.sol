@@ -22,7 +22,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory = Factory(0x2A4a8ea165aa1d7F45d7ac03BFd6Fa58F9F5F8CC);
+    Factory public factory = Factory(0x4Ef9A0Eea3B521478762Df70d6127eeF3d386B22);
     Lendgine public lendgine;
     Pair public pair;
 
@@ -220,8 +220,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.decreaseLiquidity(
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
                 liquidity: 1 ether,
                 recipient: cuh,
                 deadline: block.timestamp
@@ -262,8 +260,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.decreaseLiquidity(
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1_000_000,
-                amount1: 8_000_000,
                 liquidity: 1_000_000,
                 recipient: cuh,
                 deadline: block.timestamp + 365 days
@@ -330,7 +326,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     function testStaggerDepositSameOwner() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
         mint(address(this), 5 ether);
-        pair.burn(address(dennis), 0.5 ether, 4 ether, 0.5 ether);
+        pair.burn(address(dennis), 0.5 ether);
         vm.warp(block.timestamp + 365 days);
 
         base.mint(cuh, 1 ether);
@@ -380,7 +376,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     function testStaggerDepositDifferentOwner() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
         mint(address(this), 5 ether);
-        pair.burn(address(this), 0.5 ether, 4 ether, 0.5 ether);
+        pair.burn(address(this), 0.5 ether);
         vm.warp(block.timestamp + 365 days);
 
         uint256 tokenID2 = mintLiq(dennis, 1 ether, 8 ether, 1 ether, block.timestamp + 365 days);

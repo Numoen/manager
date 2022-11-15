@@ -27,7 +27,7 @@ contract LiquidityManagerTest is Test {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory = Factory(0x2A4a8ea165aa1d7F45d7ac03BFd6Fa58F9F5F8CC);
+    Factory public factory = Factory(0x4Ef9A0Eea3B521478762Df70d6127eeF3d386B22);
     IUniswapV2Factory public uniFactory = IUniswapV2Factory(0x62d5b84bE28a183aBB507E125B384122D2C25fAE);
 
     Lendgine public lendgine;
@@ -86,7 +86,6 @@ contract LiquidityManagerTest is Test {
                 liquidity: liquidity,
                 sharesMin: shares,
                 borrowAmount: borrowAmount,
-                price: price,
                 recipient: spender,
                 deadline: deadline
             })
@@ -181,7 +180,6 @@ contract LiquidityManagerTest is Test {
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
                 liquidity: liquidity,
-                price: 1 ether,
                 recipient: cuh,
                 deadline: block.timestamp
             })
