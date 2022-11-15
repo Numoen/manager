@@ -37,8 +37,8 @@ contract DeployScript is Script {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0: 10**14,
-                amount1: 8 * 10**14,
+                amount0Min: 10**14,
+                amount1Min: 8 * 10**14,
                 liquidity: 10**14,
                 recipient: 0x59A6AbC89C158ef88d5872CaB4aC3B08474883D9,
                 deadline: block.timestamp + 60

@@ -116,8 +116,8 @@ contract LiquidityManagerTest is Test {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0: amount0,
-                amount1: amount1,
+                amount0Min: amount0,
+                amount1Min: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline
@@ -179,7 +179,8 @@ contract LiquidityManagerTest is Test {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidity: liquidity,
+                liquidityMax: liquidity,
+                shares: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })

@@ -66,8 +66,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0: amount0,
-                amount1: amount1,
+                amount0Min: amount0,
+                amount1Min: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline
@@ -171,8 +171,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp
             })
@@ -203,8 +203,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })
@@ -315,8 +315,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: 2,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })
@@ -342,8 +342,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })

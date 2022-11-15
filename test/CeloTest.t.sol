@@ -84,7 +84,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         // );
 
         vm.prank(cuh);
-        lendgine.approve(address(lendgineRouter), 501 ether);
+        lendgine.approve(address(lendgineRouter), 500 ether);
         // console2.log("pair", pair.totalSupply());
         // console2.log(ERC20(cusd).balanceOf(address(pair)), ERC20(mobi).balanceOf(address(pair)));
 
@@ -96,7 +96,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidity: 500 ether,
+                liquidityMax: 501 ether,
+                shares: 500 ether,
                 recipient: cuh,
                 deadline: block.timestamp + 60
             })

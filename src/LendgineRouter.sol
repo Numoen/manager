@@ -6,6 +6,7 @@ import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
+import { PRBMath } from "prb-math/PRBMath.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
@@ -196,7 +197,8 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 baseScaleFactor;
         uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint256 liquidity;
+        uint256 shares;
+        uint256 liquidityMax;
         address recipient;
         uint256 deadline;
     }
@@ -219,15 +221,18 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
             params.upperBound
         );
 
+        Lendgine(lendgine).accrueInterest();
+        uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
+        if (liquidity > params.liquidityMax) revert SlippageError();
+
         uint256 r0;
         uint256 r1;
         {
-            (uint256 p0, uint256 p1) = Pair(pair).balances();
+            (uint256 p0, uint256 p1) = (Pair(pair).reserve0(), Pair(pair).reserve1());
             uint256 _totalSupply = Pair(pair).totalSupply();
-            // TODO: use full math
 
-            r0 = (p0 * params.liquidity) / _totalSupply;
-            r1 = (p1 * params.liquidity) / _totalSupply;
+            r0 = PRBMath.mulDiv(p0, liquidity, _totalSupply);
+            r1 = PRBMath.mulDiv(p1, liquidity, _totalSupply);
         }
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
@@ -236,7 +241,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
             (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
             repayAmount = determineRepayAmount(
                 RepayParams({
-                    liquidity: params.liquidity,
+                    liquidity: liquidity,
                     upperBound: params.upperBound,
                     r0: r0,
                     r1: r1,
@@ -246,10 +251,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
             );
         }
 
-        Lendgine(lendgine).accrueInterest();
-        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(params.liquidity);
-
-        Lendgine(lendgine).transferFrom(msg.sender, lendgine, shares);
+        Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
         IUniswapV2Pair(uniPair).swap(
             params.base < params.speculative ? r0 : r1,
             params.base < params.speculative ? r1 : r0,
@@ -260,14 +262,14 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
                     pair: pair,
                     speculative: params.speculative,
                     base: params.base,
-                    liquidity: params.liquidity,
+                    liquidity: liquidity,
                     repayAmount: repayAmount,
                     recipient: params.recipient
                 })
             )
         );
 
-        emit Burn(msg.sender, lendgine, shares, params.liquidity);
+        emit Burn(msg.sender, lendgine, params.shares, liquidity);
     }
 
     /*//////////////////////////////////////////////////////////////
