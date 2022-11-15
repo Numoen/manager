@@ -10,7 +10,6 @@ import { PRBMath } from "prb-math/PRBMath.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
-import { NumoenLibrary } from "./libraries/NumoenLibrary.sol";
 import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "./interfaces/IUniswapV2Pair.sol";
