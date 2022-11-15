@@ -252,6 +252,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         }
 
         Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
+        Pair(pair).skim(params.recipient);
         IUniswapV2Pair(uniPair).swap(
             params.base < params.speculative ? r0 : r1,
             params.base < params.speculative ? r1 : r0,

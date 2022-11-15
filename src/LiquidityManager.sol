@@ -144,6 +144,7 @@ contract LiquidityManager {
         }
         if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
 
+        Pair(pair).skim(params.recipient);
         SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, amount0);
         SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, amount1);
         Pair(pair).mint(params.liquidity);
@@ -206,6 +207,7 @@ contract LiquidityManager {
 
         if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
 
+        Pair(pair).skim(position.operator);
         SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, pair, amount0);
         SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, pair, amount1);
         Pair(pair).mint(params.liquidity);

@@ -18,7 +18,7 @@ import { CallbackHelper } from "./utils/CallbackHelper.sol";
 import { Test } from "forge-std/Test.sol";
 import "forge-std/console2.sol";
 
-contract LiquidityManagerTest is Test {
+contract LendgineRouterTest is Test {
     MockERC20 public immutable base;
     MockERC20 public immutable speculative;
 
@@ -27,7 +27,7 @@ contract LiquidityManagerTest is Test {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory = Factory(0x4Ef9A0Eea3B521478762Df70d6127eeF3d386B22);
+    Factory public factory = Factory(0x60BA0a7DCd2caa3Eb171f0A8692A37d34900E247);
     IUniswapV2Factory public uniFactory = IUniswapV2Factory(0x62d5b84bE28a183aBB507E125B384122D2C25fAE);
 
     Lendgine public lendgine;
@@ -160,6 +160,32 @@ contract LiquidityManagerTest is Test {
         assertEq(base.balanceOf(address(lendgineRouter)), 0);
         assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
         assertEq(pair.buffer(), 0);
+    }
+
+    function testBurnDDos() public {
+        mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
+        (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
+
+        uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
+
+        vm.prank(cuh);
+        lendgine.approve(address(lendgineRouter), _shares);
+
+        base.mint(address(pair), 1 ether);
+        vm.prank(cuh);
+        address _lendgine = lendgineRouter.burn(
+            LendgineRouter.BurnParams({
+                base: address(base),
+                speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
+                upperBound: upperBound,
+                liquidityMax: liquidity,
+                shares: _shares,
+                recipient: cuh,
+                deadline: block.timestamp
+            })
+        );
     }
 
     function testBurnBasic() public {

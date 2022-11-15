@@ -22,7 +22,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory = Factory(0x4Ef9A0Eea3B521478762Df70d6127eeF3d386B22);
+    Factory public factory = Factory(0x60BA0a7DCd2caa3Eb171f0A8692A37d34900E247);
     Lendgine public lendgine;
     Pair public pair;
 
@@ -132,8 +132,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function setUp() public {
-        // factory = new Factory();
-
         (address _lendgine, address _pair) = factory.createLendgine(
             address(base),
             address(speculative),
@@ -411,5 +409,34 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         );
         assertPosition(tokenID2, dennis, key, 1 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
         assertEq(amountCollected, dilutionLP2 * 5);
+    }
+
+    function testDonateDDos() public {
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
+
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 8 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 8 ether);
+
+        base.mint(address(pair), 1 ether);
+
+        vm.prank(cuh);
+        liquidityManager.increaseLiquidity(
+            LiquidityManager.IncreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
+                liquidity: 1 ether,
+                deadline: block.timestamp
+            })
+        );
+
+        assertPosition(tokenID, cuh, key, 2 ether, 0, 0);
+        assertEq(base.balanceOf(cuh), 1 ether);
     }
 }
