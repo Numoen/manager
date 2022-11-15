@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";

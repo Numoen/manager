@@ -1,55 +1,20 @@
 pragma solidity ^0.8.4;
 
 import { LendgineRouter } from "../src/LendgineRouter.sol";
-import { LiquidityManager } from "../src/LiquidityManager.sol";
 
-import { Factory } from "numoen-core/Factory.sol";
-import { Lendgine } from "numoen-core/Lendgine.sol";
-import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
 import { IUniswapV2Factory } from "../src/interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "../src/interfaces/IUniswapV2Pair.sol";
 import { NumoenLibrary } from "../src/libraries/NumoenLibrary.sol";
-import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
-import { MockERC20 } from "./utils/mocks/MockERC20.sol";
-import { CallbackHelper } from "./utils/CallbackHelper.sol";
+import { TestHelper } from "./utils/TestHelper.sol";
 
-import { Test } from "forge-std/Test.sol";
 import "forge-std/console2.sol";
 
-contract LendgineRouterTest is Test {
-    MockERC20 public immutable base;
-    MockERC20 public immutable speculative;
-
-    uint256 public immutable upperBound = 5 ether;
-
-    address public immutable cuh;
-    address public immutable dennis;
-
-    Factory public factory = Factory(0x60BA0a7DCd2caa3Eb171f0A8692A37d34900E247);
+contract LendgineRouterTest is TestHelper {
     IUniswapV2Factory public uniFactory = IUniswapV2Factory(0x62d5b84bE28a183aBB507E125B384122D2C25fAE);
-
-    Lendgine public lendgine;
-    Pair public pair;
     IUniswapV2Pair public uniPair;
 
-    LiquidityManager public liquidityManager;
     LendgineRouter public lendgineRouter;
-
-    function mkaddr(string memory name) public returns (address) {
-        address addr = address(uint160(uint256(keccak256(abi.encodePacked(name)))));
-        vm.label(addr, name);
-        return addr;
-    }
-
-    constructor() {
-        base = new MockERC20();
-        speculative = new MockERC20();
-
-        cuh = mkaddr("cuh");
-        dennis = mkaddr("dennis");
-    }
 
     function mint(
         address spender,
@@ -58,16 +23,11 @@ contract LendgineRouterTest is Test {
         uint256 slippageBps,
         uint256 deadline
     ) public returns (address _lendgine, uint256 _shares) {
-        uint256 amount = Lendgine(lendgine).convertLiquidityToAsset(liquidity);
-        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(liquidity);
+        uint256 amount = lendgine.convertLiquidityToAsset(liquidity);
+        uint256 shares = lendgine.convertLiquidityToShare(liquidity);
 
-        uint256 borrowAmount = NumoenLibrary.determineBorrowAmount(
-            NumoenLibrary.MathParams0({
-                speculativeAmount: amount,
-                upperBound: upperBound,
-                price: price,
-                slippageBps: slippageBps
-            })
+        uint256 borrowAmount = determineBorrowAmount(
+            MathParams({ speculativeAmount: amount, upperBound: upperBound, price: price, slippageBps: slippageBps })
         );
         console2.log(borrowAmount);
         speculative.mint(spender, amount);
@@ -92,52 +52,10 @@ contract LendgineRouterTest is Test {
         );
     }
 
-    function mintLiq(
-        address spender,
-        uint256 amount0,
-        uint256 amount1,
-        uint256 liquidity,
-        uint256 deadline
-    ) public returns (uint256 tokenID) {
-        base.mint(spender, amount0);
-        speculative.mint(spender, amount1);
-
-        vm.prank(spender);
-        base.approve(address(liquidityManager), amount0);
-
-        vm.prank(spender);
-        speculative.approve(address(liquidityManager), amount1);
-
-        vm.prank(spender);
-        (tokenID) = liquidityManager.mint(
-            LiquidityManager.MintParams({
-                base: address(base),
-                speculative: address(speculative),
-                baseScaleFactor: 18,
-                speculativeScaleFactor: 18,
-                upperBound: upperBound,
-                amount0Min: amount0,
-                amount1Min: amount1,
-                liquidity: liquidity,
-                recipient: spender,
-                deadline: deadline
-            })
-        );
-    }
-
     function setUp() public {
-        (address _lendgine, address _pair) = factory.createLendgine(
-            address(base),
-            address(speculative),
-            18,
-            18,
-            upperBound
-        );
-        lendgine = Lendgine(_lendgine);
-        pair = Pair(_pair);
+        _setUp();
 
         lendgineRouter = new LendgineRouter(address(factory), address(uniFactory));
-        liquidityManager = new LiquidityManager(address(factory));
 
         address _uniPair = uniFactory.createPair(address(base), address(speculative));
         uniPair = IUniswapV2Pair(_uniPair);
