@@ -4,8 +4,6 @@
 [submodule "lib/forge-std"]
 	path = lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
-[submodule "/Users/kylescott/src/numoen-manager/lib/core"]
-	branch = audit
 [submodule "lib/core"]
 	path = lib/core
 	url = https://github.com/numoen/core
