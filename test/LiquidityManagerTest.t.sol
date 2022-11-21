@@ -5,7 +5,7 @@ import { LiquidityManager } from "../src/LiquidityManager.sol";
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { CallbackHelper } from "./utils/CallbackHelper.sol";
@@ -22,7 +22,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory;
+    Factory public factory = Factory(0x60BA0a7DCd2caa3Eb171f0A8692A37d34900E247);
     Lendgine public lendgine;
     Pair public pair;
 
@@ -66,8 +66,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0: amount0,
-                amount1: amount1,
+                amount0Min: amount0,
+                amount1Min: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline
@@ -132,8 +132,6 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function setUp() public {
-        factory = new Factory();
-
         (address _lendgine, address _pair) = factory.createLendgine(
             address(base),
             address(speculative),
@@ -148,7 +146,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testMintBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         assertEq(tokenID, 1);
 
@@ -156,7 +154,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testIncreaseBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 8 ether);
@@ -171,10 +169,10 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
-                deadline: 2
+                deadline: block.timestamp
             })
         );
 
@@ -182,11 +180,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testIncreaseInterest() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         mint(address(this), 5 ether);
 
-        vm.warp(365 days + 1);
+        vm.warp(block.timestamp + 365 days);
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
@@ -203,10 +201,10 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
-                deadline: 365 days + 2
+                deadline: block.timestamp + 365 days
             })
         );
 
@@ -214,17 +212,17 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testDecreaseBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         vm.prank(cuh);
         liquidityManager.decreaseLiquidity(
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
                 liquidity: 1 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 recipient: cuh,
-                deadline: 2
+                deadline: block.timestamp
             })
         );
 
@@ -232,8 +230,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             address _operator,
             address _base,
             address _speculative,
-            uint256 _baseScaleFactor,
-            uint256 _speculativeScaleFactor,
+            ,
+            ,
             uint256 _upperBound,
             uint256 _liquidity,
             uint256 _rewardPerLiquidityPaid,
@@ -250,11 +248,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testDecreaseInterest() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         mint(address(this), 5 ether);
 
-        vm.warp(365 days + 1);
+        vm.warp(block.timestamp + 365 days);
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
@@ -262,11 +260,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.decreaseLiquidity(
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1_000_000,
-                amount1: 8_000_000,
                 liquidity: 1_000_000,
+                amount0Min: 0,
+                amount1Min: 8_000_000,
                 recipient: cuh,
-                deadline: 365 days + 2
+                deadline: block.timestamp + 365 days
             })
         );
 
@@ -274,11 +272,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testCollectBasic() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         mint(address(this), 5 ether);
 
-        vm.warp(365 days + 1);
+        vm.warp(block.timestamp + 365 days);
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
@@ -294,7 +292,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testOverCollect() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
         assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
 
         vm.prank(cuh);
@@ -319,19 +317,19 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: 2,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
-                deadline: 365 days + 2
+                deadline: block.timestamp + 365 days
             })
         );
     }
 
     function testStaggerDepositSameOwner() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
         mint(address(this), 5 ether);
-        pair.burn(address(dennis), 0.5 ether, 4 ether, 0.5 ether);
-        vm.warp(365 days + 1);
+        pair.burn(address(dennis), 0.5 ether);
+        vm.warp(block.timestamp + 365 days);
 
         base.mint(cuh, 1 ether);
         speculative.mint(cuh, 8 ether);
@@ -346,13 +344,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0: 1 ether,
-                amount1: 8 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 liquidity: 1 ether,
-                deadline: 365 days + 2
+                deadline: block.timestamp + 365 days
             })
         );
-        vm.warp(730 days + 1);
+        vm.warp(block.timestamp + 365 days);
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
         uint256 dilutionLP2 = ((0.5 ether - dilutionLP) * lendgine.getBorrowRate(0.5 ether - dilutionLP, 2 ether)) /
@@ -378,16 +376,16 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function testStaggerDepositDifferentOwner() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, 2);
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
         mint(address(this), 5 ether);
-        pair.burn(address(this), 0.5 ether, 4 ether, 0.5 ether);
-        vm.warp(365 days + 1);
+        pair.burn(address(this), 0.5 ether);
+        vm.warp(block.timestamp + 365 days);
 
-        uint256 tokenID2 = mintLiq(dennis, 1 ether, 8 ether, 1 ether, 365 days + 2);
+        uint256 tokenID2 = mintLiq(dennis, 1 ether, 8 ether, 1 ether, block.timestamp + 365 days);
 
         assertFalse(tokenID == tokenID2);
 
-        vm.warp(730 days + 1);
+        vm.warp(block.timestamp + 365 days);
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
         uint256 dilutionLP2 = ((0.5 ether - dilutionLP) * lendgine.getBorrowRate(0.5 ether - dilutionLP, 2 ether)) /
@@ -415,5 +413,35 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         );
         assertPosition(tokenID2, dennis, key, 1 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
         assertEq(amountCollected, dilutionLP2 * 5);
+    }
+
+    function testDonateDDos() public {
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
+
+        base.mint(cuh, 1 ether);
+        speculative.mint(cuh, 8 ether);
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 8 ether);
+
+        base.mint(address(pair), 1 ether);
+
+        vm.prank(cuh);
+        liquidityManager.increaseLiquidity(
+            LiquidityManager.IncreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
+                liquidity: 1 ether,
+                deadline: block.timestamp
+            })
+        );
+
+        console2.log(tokenID);
+        assertPosition(tokenID, cuh, key, 2 ether, 0, 0);
+        // assertEq(base.balanceOf(cuh), 1 ether);
     }
 }

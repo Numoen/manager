@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity >=0.8.0;
+pragma solidity >=0.8.4;
 
 /// @dev Adapted from Rari's Solmate https://github.com/Rari-Capital/solmate/blob/main/src/utils/SafeTransferLib.sol
 /// Edited from using error message to custom error for lower bytecode size.

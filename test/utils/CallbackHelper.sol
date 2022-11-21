@@ -2,8 +2,8 @@ pragma solidity ^0.8.4;
 
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
+import { LendgineAddress } from "../../src/libraries/LendgineAddress.sol";
 import { SafeTransferLib } from "../../src/libraries/SafeTransferLib.sol";
 import { ERC20 } from "numoen-core/ERC20.sol";
 import "forge-std/console2.sol";

@@ -1,40 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
 import { IMintCallback } from "numoen-core/interfaces/IMintCallback.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
+import { PRBMath } from "prb-math/PRBMath.sol";
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
-import { NumoenLibrary } from "./libraries/NumoenLibrary.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
+import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
+import { IUniswapV2Pair } from "./interfaces/IUniswapV2Pair.sol";
+import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
 
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
-contract LendgineRouter is IMintCallback {
+contract LendgineRouter is IMintCallback, IUniswapV2Callee {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event Mint(
-        address indexed recipient,
-        address indexed lendgine,
-        uint256 shares,
-        uint256 amountB,
-        uint256 amountS,
-        uint256 liquidity
-    );
+    event Mint(address indexed recipient, address indexed lendgine, uint256 shares, uint256 liquidity);
 
-    event Burn(
-        address indexed payer,
-        address indexed lendgine,
-        uint256 shares,
-        uint256 amountB,
-        uint256 amountS,
-        uint256 liquidity
-    );
+    event Burn(address indexed payer, address indexed lendgine, uint256 shares, uint256 liquidity);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -52,6 +42,8 @@ contract LendgineRouter is IMintCallback {
 
     address public immutable factory;
 
+    address public immutable uniFactory;
+
     /*//////////////////////////////////////////////////////////////
                            LIVELINESS MODIFIER
     //////////////////////////////////////////////////////////////*/
@@ -65,8 +57,9 @@ contract LendgineRouter is IMintCallback {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _factory) {
+    constructor(address _factory, address _uniFactory) {
         factory = _factory;
+        uniFactory = _uniFactory;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -75,6 +68,8 @@ contract LendgineRouter is IMintCallback {
 
     struct CallbackData {
         LendgineAddress.LendgineKey key;
+        address uniPair;
+        uint256 userAmount;
         address payer;
     }
 
@@ -82,14 +77,73 @@ contract LendgineRouter is IMintCallback {
         CallbackData memory decoded = abi.decode(data, (CallbackData));
         CallbackValidation.verifyCallback(factory, decoded.key);
 
-        if (amountS > 0) SafeTransferLib.safeTransferFrom(decoded.key.speculative, decoded.payer, msg.sender, amountS);
+        uint256 liquidity = Lendgine(msg.sender).convertAssetToLiquidity(amountS);
+
+        (uint256 amountBOut, uint256 amountSOut) = Pair(Lendgine(msg.sender).pair()).burn(address(this), liquidity);
+        SafeTransferLib.safeTransfer(decoded.key.base, decoded.uniPair, amountBOut);
+
+        uint256 sOut = getSOut(amountBOut, decoded.uniPair, decoded.key.base < decoded.key.speculative);
+        IUniswapV2Pair(decoded.uniPair).swap(
+            decoded.key.base < decoded.key.speculative ? 0 : sOut,
+            decoded.key.base < decoded.key.speculative ? sOut : 0,
+            msg.sender,
+            bytes("")
+        );
+
+        SafeTransferLib.safeTransfer(decoded.key.speculative, msg.sender, amountSOut);
+        if (amountS - sOut - amountSOut > decoded.userAmount) revert SlippageError();
+        SafeTransferLib.safeTransferFrom(
+            decoded.key.speculative,
+            decoded.payer,
+            msg.sender,
+            amountS - sOut - amountSOut
+        );
+    }
+
+    struct UniCallbackData {
+        address lendgine;
+        address pair;
+        address speculative;
+        address base;
+        uint256 liquidity;
+        uint256 repayAmount;
+        address recipient;
+    }
+
+    function uniswapV2Call(
+        address,
+        uint256 amount0,
+        uint256 amount1,
+        bytes calldata data
+    ) external override {
+        UniCallbackData memory decoded = abi.decode(data, (UniCallbackData));
+
+        SafeTransferLib.safeTransfer(
+            decoded.base,
+            decoded.pair,
+            decoded.base < decoded.speculative ? amount0 : amount1
+        );
+        SafeTransferLib.safeTransfer(
+            decoded.speculative,
+            decoded.pair,
+            decoded.base < decoded.speculative ? amount1 : amount0
+        );
+
+        Pair(decoded.pair).mint(decoded.liquidity);
+        Lendgine(decoded.lendgine).burn(address(this));
+
+        SafeTransferLib.safeTransfer(decoded.speculative, msg.sender, decoded.repayAmount);
+        SafeTransferLib.safeTransfer(
+            decoded.speculative,
+            decoded.recipient,
+            Lendgine(decoded.lendgine).convertLiquidityToAsset(decoded.liquidity) - decoded.repayAmount
+        );
     }
 
     /*//////////////////////////////////////////////////////////////
                                  LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    // TODO: use price instead
     struct MintParams {
         address base;
         address speculative;
@@ -97,7 +151,7 @@ contract LendgineRouter is IMintCallback {
         uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 liquidity;
-        uint256 price;
+        uint256 borrowAmount;
         uint256 sharesMin;
         address recipient;
         uint256 deadline;
@@ -124,30 +178,20 @@ contract LendgineRouter is IMintCallback {
             params.speculativeScaleFactor,
             params.upperBound
         );
-        address pair = LendgineAddress.computePairAddress(
-            factory,
-            params.base,
-            params.speculative,
-            params.baseScaleFactor,
-            params.speculativeScaleFactor,
-            params.upperBound
-        );
+
+        address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
+        uint256 speculativeAmount = Lendgine(lendgine).convertLiquidityToAsset(params.liquidity);
 
         shares = Lendgine(lendgine).mint(
             params.recipient,
-            Lendgine(lendgine).convertLiquidityToAsset(params.liquidity),
-            abi.encode(CallbackData({ key: lendgineKey, payer: msg.sender }))
+            speculativeAmount + params.borrowAmount,
+            abi.encode(
+                CallbackData({ key: lendgineKey, uniPair: uniPair, userAmount: speculativeAmount, payer: msg.sender })
+            )
         );
+
         if (shares < params.sharesMin) revert SlippageError();
-
-        (uint256 amountBOut, uint256 amountSOut) = NumoenLibrary.priceToReserves(
-            params.price,
-            params.liquidity,
-            params.upperBound
-        );
-        Pair(pair).burn(params.recipient, amountBOut, amountSOut, params.liquidity);
-
-        emit Mint(params.recipient, lendgine, shares, amountBOut, amountSOut, params.liquidity);
+        emit Mint(params.recipient, lendgine, shares, params.liquidity);
     }
 
     struct BurnParams {
@@ -158,20 +202,11 @@ contract LendgineRouter is IMintCallback {
         uint256 upperBound;
         uint256 shares;
         uint256 liquidityMax;
-        uint256 price;
         address recipient;
         uint256 deadline;
     }
 
-    function burn(BurnParams calldata params)
-        external
-        checkDeadline(params.deadline)
-        returns (
-            address lendgine,
-            uint256 amountBIn,
-            uint256 amountSIn
-        )
-    {
+    function burn(BurnParams calldata params) external checkDeadline(params.deadline) returns (address lendgine) {
         lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             params.base,
@@ -189,19 +224,93 @@ contract LendgineRouter is IMintCallback {
             params.upperBound
         );
 
+        Lendgine(lendgine).accrueInterest();
         uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
         if (liquidity > params.liquidityMax) revert SlippageError();
 
-        (amountBIn, amountSIn) = NumoenLibrary.priceToReserves(params.price, liquidity, Pair(pair).upperBound());
+        uint256 r0;
+        uint256 r1;
+        {
+            (uint256 p0, uint256 p1) = (Pair(pair).reserve0(), Pair(pair).reserve1());
+            uint256 _totalSupply = Pair(pair).totalSupply();
 
-        SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, amountBIn);
-        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, amountSIn);
+            r0 = PRBMath.mulDiv(p0, liquidity, _totalSupply);
+            r1 = PRBMath.mulDiv(p1, liquidity, _totalSupply);
+        }
 
-        Pair(pair).mint(liquidity);
+        address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
+        uint256 repayAmount;
+        {
+            (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
+            repayAmount = determineRepayAmount(
+                RepayParams({
+                    liquidity: liquidity,
+                    upperBound: params.upperBound,
+                    r0: r0,
+                    r1: r1,
+                    u0: params.base < params.speculative ? u0 : u1,
+                    u1: params.base < params.speculative ? u1 : u0
+                })
+            );
+        }
 
         Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
-        Lendgine(lendgine).burn(params.recipient);
+        Pair(pair).skim(params.recipient);
+        IUniswapV2Pair(uniPair).swap(
+            params.base < params.speculative ? r0 : r1,
+            params.base < params.speculative ? r1 : r0,
+            address(this),
+            abi.encode(
+                UniCallbackData({
+                    lendgine: lendgine,
+                    pair: pair,
+                    speculative: params.speculative,
+                    base: params.base,
+                    liquidity: liquidity,
+                    repayAmount: repayAmount,
+                    recipient: params.recipient
+                })
+            )
+        );
 
-        emit Burn(msg.sender, lendgine, params.shares, amountBIn, amountSIn, liquidity);
+        emit Burn(msg.sender, lendgine, params.shares, liquidity);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            INTERNAL LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    struct RepayParams {
+        uint256 liquidity;
+        uint256 upperBound;
+        uint256 r0;
+        uint256 r1;
+        uint256 u0;
+        uint256 u1;
+    }
+
+    function determineRepayAmount(RepayParams memory params) internal pure returns (uint256) {
+        uint256 numerator = 1000 *
+            (PRBMathUD60x18.mul(params.u0, params.r1) +
+                PRBMathUD60x18.mul(params.u1, params.r0) +
+                PRBMathUD60x18.mul(params.r0, params.r1));
+        uint256 denominator = 997 * (params.u0 - params.r0);
+
+        return PRBMathUD60x18.div(numerator, denominator);
+    }
+
+    function getSOut(
+        uint256 amountBIn,
+        address uniPair,
+        bool isBase0
+    ) internal view returns (uint256) {
+        (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
+        uint256 reserveIn = isBase0 ? u0 : u1;
+        uint256 reserveOut = isBase0 ? u1 : u0;
+
+        uint256 amountInWithFee = amountBIn * 997;
+        uint256 numerator = amountInWithFee * reserveOut;
+        uint256 denominator = reserveIn * 1000 + amountInWithFee;
+        return numerator / denominator;
     }
 }

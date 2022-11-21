@@ -9,13 +9,14 @@ import { LendgineRouter } from "../src/LendgineRouter.sol";
 
 contract DeployScript is Script {
     function run() public {
-        address factory = 0x95c62A69B6a7da59318256B2ef8a39fda347F7B2;
+        address factory = 0x60BA0a7DCd2caa3Eb171f0A8692A37d34900E247;
+        address uniFactory = 0x62d5b84bE28a183aBB507E125B384122D2C25fAE;
 
         uint256 pk = vm.envUint("PRIVATE_KEY");
         vm.broadcast(pk);
         new LiquidityManager(factory);
 
-        vm.broadcast(pk);
-        new LendgineRouter(factory);
+        // vm.broadcast(pk);
+        // new LendgineRouter(factory, uniFactory);
     }
 }

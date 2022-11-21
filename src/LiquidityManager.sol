@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
+import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
 
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
+import { PRBMath } from "prb-math/PRBMath.sol";
 
 /// @notice Wraps Numoen liquidity positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
@@ -23,7 +24,7 @@ contract LiquidityManager {
 
     event IncreaseLiquidity(uint256 indexed tokenID, uint256 liquidity, uint256 amount0, uint256 amount1);
 
-    event DecreaseLiquidity(uint256 indexed tokenID, uint256 liquidity, uint256 amount0, uint256 amount1);
+    event DecreaseLiquidity(uint256 indexed tokenID, uint256 liquidity);
 
     event Collect(uint256 indexed tokenID, uint256 amount);
 
@@ -96,8 +97,8 @@ contract LiquidityManager {
         uint256 baseScaleFactor;
         uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint256 amount0;
-        uint256 amount1;
+        uint256 amount0Min;
+        uint256 amount1Min;
         uint256 liquidity;
         address recipient;
         uint256 deadline;
@@ -130,8 +131,22 @@ contract LiquidityManager {
             params.upperBound
         );
 
-        SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, params.amount0);
-        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, params.amount1);
+        (uint256 r0, uint256 r1) = (Pair(pair).reserve0(), Pair(pair).reserve1());
+        uint256 _totalSupply = Pair(pair).totalSupply();
+        uint256 amount0;
+        uint256 amount1;
+        if (_totalSupply == 0) {
+            amount0 = params.amount0Min;
+            amount1 = params.amount1Min;
+        } else {
+            amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
+            amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
+        }
+        if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
+
+        Pair(pair).skim(params.recipient);
+        SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, amount0);
+        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, amount1);
         Pair(pair).mint(params.liquidity);
         Lendgine(lendgine).deposit(address(this));
 
@@ -146,13 +161,13 @@ contract LiquidityManager {
             tokensOwed: 0
         });
 
-        emit Mint(params.recipient, tokenID, params.liquidity, params.amount0, params.amount1);
+        emit Mint(params.recipient, tokenID, params.liquidity, amount0, amount1);
     }
 
     struct IncreaseLiquidityParams {
         uint256 tokenID;
-        uint256 amount0;
-        uint256 amount1;
+        uint256 amount0Min;
+        uint256 amount1Min;
         uint256 liquidity;
         uint256 deadline;
     }
@@ -182,8 +197,19 @@ contract LiquidityManager {
             lendgineKey.upperBound
         );
 
-        SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, pair, params.amount0);
-        SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, pair, params.amount1);
+        (uint256 r0, uint256 r1) = (Pair(pair).reserve0(), Pair(pair).reserve1());
+        uint256 _totalSupply = Pair(pair).totalSupply();
+        uint256 amount0;
+        uint256 amount1;
+
+        amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
+        amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
+
+        if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
+
+        Pair(pair).skim(position.operator);
+        SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, pair, amount0);
+        SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, pair, amount1);
         Pair(pair).mint(params.liquidity);
         Lendgine(lendgine).deposit(address(this));
 
@@ -196,14 +222,14 @@ contract LiquidityManager {
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
         position.liquidity += params.liquidity;
 
-        emit IncreaseLiquidity(params.tokenID, params.liquidity, params.amount0, params.amount1);
+        emit IncreaseLiquidity(params.tokenID, params.liquidity, amount0, amount1);
     }
 
     struct DecreaseLiquidityParams {
         uint256 tokenID;
-        uint256 amount0;
-        uint256 amount1;
         uint256 liquidity;
+        uint256 amount0Min;
+        uint256 amount1Min;
         address recipient;
         uint256 deadline;
     }
@@ -234,7 +260,10 @@ contract LiquidityManager {
         );
 
         Lendgine(lendgine).withdraw(params.liquidity);
-        Pair(pair).burn(params.recipient, params.amount0, params.amount1, params.liquidity);
+        (uint256 amount0Out, uint256 amount1Out) = Pair(pair).burn(params.recipient, params.liquidity);
+
+        if (amount0Out < params.amount0Min) revert SlippageError();
+        if (amount1Out < params.amount1Min) revert SlippageError();
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
@@ -245,7 +274,7 @@ contract LiquidityManager {
         position.rewardPerLiquidityPaid = rewardPerLiquidityPaid;
         position.liquidity -= params.liquidity;
 
-        emit DecreaseLiquidity(params.tokenID, params.liquidity, params.amount0, params.amount1);
+        emit DecreaseLiquidity(params.tokenID, params.liquidity);
     }
 
     struct CollectParams {
