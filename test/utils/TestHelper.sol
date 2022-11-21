@@ -56,6 +56,7 @@ abstract contract TestHelper is Test, CallbackHelper {
         pair = Pair(_pair);
 
         liquidityManager = new LiquidityManager(address(factory));
+        console2.log(Lendgine(0x24aceAE438C60DD6ba937B27345531115a099048).totalLiquidityBorrowed());
     }
 
     function mintLiq(

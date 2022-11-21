@@ -219,6 +219,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
                 liquidity: 1 ether,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
                 recipient: cuh,
                 deadline: block.timestamp
             })
@@ -259,6 +261,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
                 liquidity: 1_000_000,
+                amount0Min: 0,
+                amount1Min: 8_000_000,
                 recipient: cuh,
                 deadline: block.timestamp + 365 days
             })

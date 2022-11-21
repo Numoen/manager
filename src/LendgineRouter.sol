@@ -69,6 +69,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
     struct CallbackData {
         LendgineAddress.LendgineKey key;
         address uniPair;
+        uint256 userAmount;
         address payer;
     }
 
@@ -90,6 +91,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         );
 
         SafeTransferLib.safeTransfer(decoded.key.speculative, msg.sender, amountSOut);
+        if (amountS - sOut - amountSOut > decoded.userAmount) revert SlippageError();
         SafeTransferLib.safeTransferFrom(
             decoded.key.speculative,
             decoded.payer,
@@ -183,7 +185,9 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         shares = Lendgine(lendgine).mint(
             params.recipient,
             speculativeAmount + params.borrowAmount,
-            abi.encode(CallbackData({ key: lendgineKey, uniPair: uniPair, payer: msg.sender }))
+            abi.encode(
+                CallbackData({ key: lendgineKey, uniPair: uniPair, userAmount: speculativeAmount, payer: msg.sender })
+            )
         );
 
         if (shares < params.sharesMin) revert SlippageError();

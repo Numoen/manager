@@ -228,6 +228,8 @@ contract LiquidityManager {
     struct DecreaseLiquidityParams {
         uint256 tokenID;
         uint256 liquidity;
+        uint256 amount0Min;
+        uint256 amount1Min;
         address recipient;
         uint256 deadline;
     }
@@ -258,7 +260,10 @@ contract LiquidityManager {
         );
 
         Lendgine(lendgine).withdraw(params.liquidity);
-        Pair(pair).burn(params.recipient, params.liquidity);
+        (uint256 amount0Out, uint256 amount1Out) = Pair(pair).burn(params.recipient, params.liquidity);
+
+        if (amount0Out < params.amount0Min) revert SlippageError();
+        if (amount1Out < params.amount1Min) revert SlippageError();
 
         (, uint256 rewardPerLiquidityPaid, ) = Lendgine(lendgine).positions(address(this));
 
