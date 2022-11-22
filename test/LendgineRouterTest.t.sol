@@ -11,7 +11,7 @@ import { TestHelper } from "./utils/TestHelper.sol";
 import "forge-std/console2.sol";
 
 contract LendgineRouterTest is TestHelper {
-    IUniswapV2Factory public uniFactory = IUniswapV2Factory(0x62d5b84bE28a183aBB507E125B384122D2C25fAE);
+    IUniswapV2Factory public uniFactory = IUniswapV2Factory(0xc35DADB65012eC5796536bD9864eD8773aBc74C4);
     IUniswapV2Pair public uniPair;
 
     LendgineRouter public lendgineRouter;
@@ -29,7 +29,6 @@ contract LendgineRouterTest is TestHelper {
         uint256 borrowAmount = determineBorrowAmount(
             MathParams({ speculativeAmount: amount, upperBound: upperBound, price: price, slippageBps: slippageBps })
         );
-        console2.log(borrowAmount);
         speculative.mint(spender, amount);
 
         vm.prank(spender);

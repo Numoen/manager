@@ -10,13 +10,14 @@ import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { CallbackHelper } from "./utils/CallbackHelper.sol";
 
+import { Payment } from "../src/Payment.sol";
 import { IWETH9 } from "../src/interfaces/IWETH9.sol";
 import { Test } from "forge-std/Test.sol";
 import "forge-std/console2.sol";
 
 contract LiquidityManagerTest is Test, CallbackHelper {
     MockERC20 public immutable base;
-    MockERC20 public immutable speculative;
+    IWETH9 public immutable speculative;
 
     uint256 public immutable upperBound = 5 ether;
 
@@ -39,7 +40,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     }
 
     function mint(address spender, uint256 amount) public {
-        speculative.mint(spender, amount);
+        vm.deal(address(this), amount);
 
         lendgine.mint(spender, amount, abi.encode(CallbackHelper.CallbackData({ key: key, payer: spender })));
     }
@@ -52,16 +53,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         uint256 deadline
     ) public returns (uint256 tokenID) {
         base.mint(spender, amount0);
-        speculative.mint(spender, amount1);
+        vm.deal(spender, amount1);
 
         vm.prank(spender);
         base.approve(address(liquidityManager), amount0);
 
         vm.prank(spender);
-        speculative.approve(address(liquidityManager), amount1);
-
-        vm.prank(spender);
-        (tokenID) = liquidityManager.mint(
+        (tokenID) = liquidityManager.mint{ value: amount1 }(
             LiquidityManager.MintParams({
                 base: address(base),
                 speculative: address(speculative),
@@ -125,7 +123,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
 
     constructor() {
         base = new MockERC20();
-        speculative = new MockERC20();
+        speculative = weth;
 
         cuh = mkaddr("cuh");
         dennis = mkaddr("dennis");
@@ -153,22 +151,23 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(tokenID, 1);
 
         assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
+        assertEq(base.balanceOf(address(liquidityManager)), 0);
+        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
+        assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
+        assertEq(address(liquidityManager).balance, 0);
     }
 
     function testIncreaseBasic() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         base.mint(cuh, 1 ether);
-        speculative.mint(cuh, 8 ether);
+        vm.deal(cuh, 8 ether);
 
         vm.prank(cuh);
         base.approve(address(liquidityManager), 1 ether);
 
         vm.prank(cuh);
-        speculative.approve(address(liquidityManager), 8 ether);
-
-        vm.prank(cuh);
-        liquidityManager.increaseLiquidity(
+        liquidityManager.increaseLiquidity{ value: 8 ether }(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
                 amount0Min: 1 ether,
@@ -179,6 +178,10 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         );
 
         assertPosition(tokenID, cuh, key, 2 ether, 0, 0);
+        assertEq(base.balanceOf(address(liquidityManager)), 0);
+        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
+        assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
+        assertEq(address(liquidityManager).balance, 0);
     }
 
     function testIncreaseInterest() public {
@@ -191,16 +194,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
         base.mint(cuh, 1 ether);
-        speculative.mint(cuh, 8 ether);
+        vm.deal(cuh, 8 ether);
 
         vm.prank(cuh);
         base.approve(address(liquidityManager), 1 ether);
 
         vm.prank(cuh);
-        speculative.approve(address(liquidityManager), 8 ether);
-
-        vm.prank(cuh);
-        liquidityManager.increaseLiquidity(
+        liquidityManager.increaseLiquidity{ value: 8 ether }(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
                 amount0Min: 1 ether,
@@ -214,22 +214,29 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(base.balanceOf(address(liquidityManager)), 0);
         assertEq(speculative.balanceOf(address(liquidityManager)), 0);
         assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
+        assertEq(address(liquidityManager).balance, 0);
     }
 
     function testDecreaseBasic() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
-        vm.prank(cuh);
-        liquidityManager.decreaseLiquidity(
+        bytes[] memory data = new bytes[](3);
+        data[0] = abi.encodeWithSelector(
+            LiquidityManager.decreaseLiquidity.selector,
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
                 liquidity: 1 ether,
                 amount0Min: 1 ether,
                 amount1Min: 8 ether,
-                recipient: cuh,
+                recipient: address(0),
                 deadline: block.timestamp
             })
         );
+        data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 8 ether, cuh);
+        data[2] = abi.encodeWithSelector(Payment.sweepToken.selector, address(base), 1 ether, cuh);
+
+        vm.prank(cuh);
+        liquidityManager.multicall(data);
 
         (
             address _operator,
@@ -250,9 +257,15 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         assertEq(_liquidity, 0);
         assertEq(_rewardPerLiquidityPaid, 0);
         assertEq(_tokensOwed, 0);
+
+        assertEq(weth.balanceOf(cuh), 0);
+        assertEq(cuh.balance, 8 ether);
+        assertEq(base.balanceOf(cuh), 1 ether);
+
         assertEq(base.balanceOf(address(liquidityManager)), 0);
         assertEq(speculative.balanceOf(address(liquidityManager)), 0);
         assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
+        assertEq(address(liquidityManager).balance, 0);
     }
 
     function testDecreaseInterest() public {
@@ -264,22 +277,29 @@ contract LiquidityManagerTest is Test, CallbackHelper {
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
-        vm.prank(cuh);
-        liquidityManager.decreaseLiquidity(
+        bytes[] memory data = new bytes[](3);
+        data[0] = abi.encodeWithSelector(
+            LiquidityManager.decreaseLiquidity.selector,
             LiquidityManager.DecreaseLiquidityParams({
                 tokenID: tokenID,
                 liquidity: 1_000_000,
                 amount0Min: 0,
                 amount1Min: 8_000_000,
-                recipient: cuh,
+                recipient: address(0),
                 deadline: block.timestamp + 365 days
             })
         );
+        data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 8_000_000, cuh);
+        data[2] = abi.encodeWithSelector(Payment.sweepToken.selector, address(base), 1_000_000, cuh);
+
+        vm.prank(cuh);
+        liquidityManager.multicall(data);
 
         assertPosition(tokenID, cuh, key, 1 ether - 1_000_000, dilutionLP * 10, dilutionLP * 10);
         assertEq(base.balanceOf(address(liquidityManager)), 0);
         assertEq(speculative.balanceOf(address(liquidityManager)), 0);
         assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
+        assertEq(address(liquidityManager).balance, 0);
     }
 
     function testCollectBasic() public {
@@ -291,169 +311,45 @@ contract LiquidityManagerTest is Test, CallbackHelper {
 
         uint256 dilutionLP = (0.5 ether * 6875) / 10000;
 
-        vm.prank(cuh);
-        liquidityManager.collect(
-            LiquidityManager.CollectParams({ tokenID: tokenID, recipient: cuh, amountRequested: dilutionLP * 10 })
-        );
+        bytes[] memory data = new bytes[](2);
 
-        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
-        assertEq(speculative.balanceOf(cuh), dilutionLP * 10);
+        data[0] = abi.encodeWithSelector(
+            LiquidityManager.collect.selector,
+            LiquidityManager.CollectParams({
+                tokenID: tokenID,
+                recipient: address(0),
+                amountRequested: dilutionLP * 10
+            })
+        );
+        data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, dilutionLP * 10, cuh);
+
+        vm.prank(cuh);
+        liquidityManager.multicall(data);
+
+        assertEq(speculative.balanceOf(cuh), 0);
+        assertEq(cuh.balance, dilutionLP * 10);
 
         assertPosition(tokenID, cuh, key, 1 ether, dilutionLP * 10, 0);
         assertEq(base.balanceOf(address(liquidityManager)), 0);
         assertEq(speculative.balanceOf(address(liquidityManager)), 0);
         assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
-    }
-
-    function testOverCollect() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
-        assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
-
-        vm.prank(cuh);
-        uint256 amountCollected = liquidityManager.collect(
-            LiquidityManager.CollectParams({ tokenID: tokenID, recipient: cuh, amountRequested: 10 })
-        );
-        assertEq(amountCollected, 0);
-        assertEq(base.balanceOf(address(liquidityManager)), 0);
-        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
-        assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
-    }
-
-    function testIncreaseUninitialized() public {
-        base.mint(cuh, 1 ether);
-        speculative.mint(cuh, 8 ether);
-
-        vm.prank(cuh);
-        base.approve(address(liquidityManager), 1 ether);
-
-        vm.prank(cuh);
-        speculative.approve(address(liquidityManager), 8 ether);
-
-        vm.prank(cuh);
-        vm.expectRevert(LiquidityManager.UnauthorizedError.selector);
-        liquidityManager.increaseLiquidity(
-            LiquidityManager.IncreaseLiquidityParams({
-                tokenID: 2,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
-                liquidity: 1 ether,
-                deadline: block.timestamp + 365 days
-            })
-        );
-    }
-
-    function testStaggerDepositSameOwner() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
-        mint(address(this), 5 ether);
-        pair.burn(address(dennis), 0.5 ether);
-        vm.warp(block.timestamp + 365 days);
-
-        base.mint(cuh, 1 ether);
-        speculative.mint(cuh, 8 ether);
-
-        vm.prank(cuh);
-        base.approve(address(liquidityManager), 1 ether);
-
-        vm.prank(cuh);
-        speculative.approve(address(liquidityManager), 8 ether);
-
-        vm.prank(cuh);
-        liquidityManager.increaseLiquidity(
-            LiquidityManager.IncreaseLiquidityParams({
-                tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
-                liquidity: 1 ether,
-                deadline: block.timestamp + 365 days
-            })
-        );
-        vm.warp(block.timestamp + 365 days);
-        assertEq(base.balanceOf(address(liquidityManager)), 0);
-        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
-        assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
-
-        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
-        uint256 dilutionLP2 = ((0.5 ether - dilutionLP) * lendgine.getBorrowRate(0.5 ether - dilutionLP, 2 ether)) /
-            1 ether;
-
-        vm.prank(cuh);
-        uint256 amountCollected = liquidityManager.collect(
-            LiquidityManager.CollectParams({
-                tokenID: tokenID,
-                recipient: cuh,
-                amountRequested: dilutionLP * 10 + dilutionLP2 * 10
-            })
-        );
-
-        assertEq(lendgine.totalLiquidity(), 2 ether);
-        assertPosition(tokenID, cuh, key, 2 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
-        assertEq(lendgine.rewardPerLiquidityStored(), dilutionLP * 10 + dilutionLP2 * 5);
-        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
-        assertEq(amountCollected, dilutionLP * 10 + dilutionLP2 * 10);
-
-        uint256 collateral = lendgine.convertLiquidityToAsset(lendgine.convertShareToLiquidity(0.5 ether));
-        assertEq(speculative.balanceOf(address(lendgine)), collateral);
-        assertEq(base.balanceOf(address(liquidityManager)), 0);
-        assertEq(speculative.balanceOf(address(liquidityManager)), 0);
-        assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
-    }
-
-    function testStaggerDepositDifferentOwner() public {
-        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
-        mint(address(this), 5 ether);
-        pair.burn(address(this), 0.5 ether);
-        vm.warp(block.timestamp + 365 days);
-
-        uint256 tokenID2 = mintLiq(dennis, 1 ether, 8 ether, 1 ether, block.timestamp + 365 days);
-
-        assertFalse(tokenID == tokenID2);
-
-        vm.warp(block.timestamp + 365 days);
-
-        uint256 dilutionLP = (0.5 ether * 6875) / 10000;
-        uint256 dilutionLP2 = ((0.5 ether - dilutionLP) * lendgine.getBorrowRate(0.5 ether - dilutionLP, 2 ether)) /
-            1 ether;
-
-        assertEq(lendgine.totalLiquidity(), 2 ether);
-        assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
-        assertPosition(tokenID2, dennis, key, 1 ether, dilutionLP * 10, 0);
-
-        vm.prank(cuh);
-        uint256 amountCollected = liquidityManager.collect(
-            LiquidityManager.CollectParams({
-                tokenID: tokenID,
-                recipient: cuh,
-                amountRequested: dilutionLP * 10 + dilutionLP2 * 5
-            })
-        );
-
-        assertPosition(tokenID, cuh, key, 1 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
-        assertEq(amountCollected, dilutionLP * 10 + dilutionLP2 * 5);
-
-        vm.prank(dennis);
-        amountCollected = liquidityManager.collect(
-            LiquidityManager.CollectParams({ tokenID: tokenID2, recipient: dennis, amountRequested: dilutionLP2 * 5 })
-        );
-        assertPosition(tokenID2, dennis, key, 1 ether, dilutionLP * 10 + dilutionLP2 * 5, 0);
-        assertEq(amountCollected, dilutionLP2 * 5);
+        assertEq(address(liquidityManager).balance, 0);
     }
 
     function testDonateDDos() public {
         uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
 
         base.mint(cuh, 1 ether);
-        speculative.mint(cuh, 8 ether);
+        vm.deal(cuh, 8 ether);
 
         vm.prank(cuh);
         base.approve(address(liquidityManager), 1 ether);
 
-        vm.prank(cuh);
-        speculative.approve(address(liquidityManager), 8 ether);
+        vm.deal(address(this), 1 ether);
+        weth.deposit{ value: 1 ether }();
+        weth.transfer(address(pair), 1 ether);
 
-        base.mint(address(pair), 1 ether);
-
-        vm.prank(cuh);
-        bytes[] memory data = new bytes[](2);
+        bytes[] memory data = new bytes[](3);
 
         data[0] = abi.encodeWithSelector(
             LiquidityManager.skim.selector,
@@ -463,10 +359,11 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                recipient: address(cuh)
+                recipient: address(0)
             })
         );
-        data[1] = abi.encodeWithSelector(
+        data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 1 ether, cuh);
+        data[2] = abi.encodeWithSelector(
             LiquidityManager.increaseLiquidity.selector,
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
@@ -476,11 +373,13 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 deadline: block.timestamp
             })
         );
-        liquidityManager.multicall(data);
+        vm.prank(cuh);
+        liquidityManager.multicall{ value: 8 ether }(data);
 
         assertPosition(tokenID, cuh, key, 2 ether, 0, 0);
         assertEq(base.balanceOf(address(liquidityManager)), 0);
         assertEq(speculative.balanceOf(address(liquidityManager)), 0);
         assertEq(lendgine.balanceOf(address(liquidityManager)), 0);
+        assertEq(address(liquidityManager).balance, 0);
     }
 }

@@ -9,6 +9,7 @@ import { NumoenLibrary } from "../src/libraries/NumoenLibrary.sol";
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
+import { IWETH9 } from "../src/interfaces/IWETH9.sol";
 
 import { Test } from "forge-std/Test.sol";
 import "forge-std/console2.sol";
@@ -22,9 +23,10 @@ contract NumoenLibraryTest is Test {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory = Factory(0x2A4a8ea165aa1d7F45d7ac03BFd6Fa58F9F5F8CC);
+    Factory public factory = Factory(0x8780898Cf5f3E3b20714b0AAEA198817b1cA481d);
     Lendgine public lendgine;
     Pair public pair;
+    IWETH9 public weth = IWETH9(0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6);
 
     LiquidityManager public liquidityManager;
 
@@ -86,7 +88,7 @@ contract NumoenLibraryTest is Test {
         lendgine = Lendgine(_lendgine);
         pair = Pair(_pair);
 
-        liquidityManager = new LiquidityManager(address(factory));
+        liquidityManager = new LiquidityManager(address(factory), address(weth));
     }
 
     function testPriceToReserves1() public {

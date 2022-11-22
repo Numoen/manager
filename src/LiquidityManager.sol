@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.4;
 
+import { Multicall } from "./Multicall.sol";
+import { Payment } from "./Payment.sol";
 import { CallbackValidation } from "./libraries/CallbackValidation.sol";
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
 import { LendgineAddress } from "./libraries/LendgineAddress.sol";
@@ -15,7 +17,7 @@ import { PRBMath } from "prb-math/PRBMath.sol";
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
 /// @author Modified from Uniswap
 /// (https://github.com/Uniswap/v3-periphery/blob/main/contracts/NonfungiblePositionManager.sol)
-contract LiquidityManager {
+contract LiquidityManager is Multicall, Payment {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -83,7 +85,7 @@ contract LiquidityManager {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _factory) {
+    constructor(address _factory, address _WETH9) Payment(_WETH9) {
         factory = _factory;
     }
 
@@ -104,7 +106,12 @@ contract LiquidityManager {
         uint256 deadline;
     }
 
-    function mint(MintParams calldata params) external checkDeadline(params.deadline) returns (uint256 tokenID) {
+    function mint(MintParams calldata params)
+        external
+        payable
+        checkDeadline(params.deadline)
+        returns (uint256 tokenID)
+    {
         tokenID = _nextID++;
         LendgineAddress.LendgineKey memory lendgineKey = LendgineAddress.LendgineKey({
             base: params.base,
@@ -144,9 +151,9 @@ contract LiquidityManager {
         }
         if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
 
-        Pair(pair).skim(params.recipient);
-        SafeTransferLib.safeTransferFrom(params.base, msg.sender, pair, amount0);
-        SafeTransferLib.safeTransferFrom(params.speculative, msg.sender, pair, amount1);
+        pay(params.base, msg.sender, pair, amount0);
+        pay(params.speculative, msg.sender, pair, amount1);
+
         Pair(pair).mint(params.liquidity);
         Lendgine(lendgine).deposit(address(this));
 
@@ -172,7 +179,11 @@ contract LiquidityManager {
         uint256 deadline;
     }
 
-    function increaseLiquidity(IncreaseLiquidityParams calldata params) external checkDeadline(params.deadline) {
+    function increaseLiquidity(IncreaseLiquidityParams calldata params)
+        external
+        payable
+        checkDeadline(params.deadline)
+    {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
@@ -207,9 +218,9 @@ contract LiquidityManager {
 
         if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
 
-        Pair(pair).skim(position.operator);
-        SafeTransferLib.safeTransferFrom(lendgineKey.base, msg.sender, pair, amount0);
-        SafeTransferLib.safeTransferFrom(lendgineKey.speculative, msg.sender, pair, amount1);
+        pay(lendgineKey.base, msg.sender, pair, amount0);
+        pay(lendgineKey.speculative, msg.sender, pair, amount1);
+
         Pair(pair).mint(params.liquidity);
         Lendgine(lendgine).deposit(address(this));
 
@@ -234,12 +245,17 @@ contract LiquidityManager {
         uint256 deadline;
     }
 
-    function decreaseLiquidity(DecreaseLiquidityParams calldata params) external checkDeadline(params.deadline) {
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
+        external
+        payable
+        checkDeadline(params.deadline)
+    {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
         if (position.lendgineID == 0) revert PositionInvalidError();
 
+        address recipient = params.recipient == address(0) ? address(this) : params.recipient;
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
         address lendgine = LendgineAddress.computeLendgineAddress(
@@ -260,7 +276,7 @@ contract LiquidityManager {
         );
 
         Lendgine(lendgine).withdraw(params.liquidity);
-        (uint256 amount0Out, uint256 amount1Out) = Pair(pair).burn(params.recipient, params.liquidity);
+        (uint256 amount0Out, uint256 amount1Out) = Pair(pair).burn(recipient, params.liquidity);
 
         if (amount0Out < params.amount0Min) revert SlippageError();
         if (amount1Out < params.amount1Min) revert SlippageError();
@@ -283,12 +299,13 @@ contract LiquidityManager {
         uint256 amountRequested;
     }
 
-    function collect(CollectParams calldata params) external returns (uint256 amount) {
+    function collect(CollectParams calldata params) external payable returns (uint256 amount) {
         Position storage position = _positions[params.tokenID];
 
         if (msg.sender != position.operator) revert UnauthorizedError();
         if (position.lendgineID == 0) revert PositionInvalidError();
 
+        address recipient = params.recipient == address(0) ? address(this) : params.recipient;
         LendgineAddress.LendgineKey memory lendgineKey = _lendgineIDToLendgineKey[position.lendgineID];
 
         address lendgine = LendgineAddress.computeLendgineAddress(
@@ -312,10 +329,34 @@ contract LiquidityManager {
         amount = params.amountRequested > position.tokensOwed ? position.tokensOwed : params.amountRequested;
         position.tokensOwed -= amount;
 
-        uint256 amountSent = Lendgine(lendgine).collect(params.recipient, amount);
+        uint256 amountSent = Lendgine(lendgine).collect(recipient, amount);
         if (amountSent < amount) revert CollectError();
 
         emit Collect(params.tokenID, amount);
+    }
+
+    struct SkimParams {
+        address base;
+        address speculative;
+        uint256 baseScaleFactor;
+        uint256 speculativeScaleFactor;
+        uint256 upperBound;
+        address recipient;
+    }
+
+    function skim(SkimParams calldata params) external payable {
+        address pair = LendgineAddress.computePairAddress(
+            factory,
+            params.base,
+            params.speculative,
+            params.baseScaleFactor,
+            params.speculativeScaleFactor,
+            params.upperBound
+        );
+
+        address recipient = params.recipient == address(0) ? address(this) : params.recipient;
+
+        Pair(pair).skim(recipient);
     }
 
     /*//////////////////////////////////////////////////////////////
