@@ -14,10 +14,12 @@ import { LendgineAddress } from "./libraries/LendgineAddress.sol";
 import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "./interfaces/IUniswapV2Pair.sol";
 import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
+import { Payment } from "./Payment.sol";
+import { Multicall } from "./Multicall.sol";
 
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
-contract LendgineRouter is IMintCallback, IUniswapV2Callee {
+contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -57,7 +59,11 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _factory, address _uniFactory) {
+    constructor(
+        address _factory,
+        address _uniFactory,
+        address _weth
+    ) Payment(_weth) {
         factory = _factory;
         uniFactory = _uniFactory;
     }
@@ -92,12 +98,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
 
         SafeTransferLib.safeTransfer(decoded.key.speculative, msg.sender, amountSOut);
         if (amountS - sOut - amountSOut > decoded.userAmount) revert SlippageError();
-        SafeTransferLib.safeTransferFrom(
-            decoded.key.speculative,
-            decoded.payer,
-            msg.sender,
-            amountS - sOut - amountSOut
-        );
+        pay(decoded.key.speculative, decoded.payer, msg.sender, amountS - sOut - amountSOut);
     }
 
     struct UniCallbackData {
@@ -133,11 +134,12 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         Lendgine(decoded.lendgine).burn(address(this));
 
         SafeTransferLib.safeTransfer(decoded.speculative, msg.sender, decoded.repayAmount);
-        SafeTransferLib.safeTransfer(
-            decoded.speculative,
-            decoded.recipient,
-            Lendgine(decoded.lendgine).convertLiquidityToAsset(decoded.liquidity) - decoded.repayAmount
-        );
+        if (decoded.recipient != address(this))
+            SafeTransferLib.safeTransfer(
+                decoded.speculative,
+                decoded.recipient,
+                Lendgine(decoded.lendgine).convertLiquidityToAsset(decoded.liquidity) - decoded.repayAmount
+            );
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -159,6 +161,7 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
 
     function mint(MintParams calldata params)
         external
+        payable
         checkDeadline(params.deadline)
         returns (address lendgine, uint256 shares)
     {
@@ -206,7 +209,12 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         uint256 deadline;
     }
 
-    function burn(BurnParams calldata params) external checkDeadline(params.deadline) returns (address lendgine) {
+    function burn(BurnParams calldata params)
+        external
+        payable
+        checkDeadline(params.deadline)
+        returns (address lendgine)
+    {
         lendgine = LendgineAddress.computeLendgineAddress(
             factory,
             params.base,
@@ -255,7 +263,6 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         }
 
         Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
-        Pair(pair).skim(params.recipient);
         IUniswapV2Pair(uniPair).swap(
             params.base < params.speculative ? r0 : r1,
             params.base < params.speculative ? r1 : r0,
@@ -274,6 +281,30 @@ contract LendgineRouter is IMintCallback, IUniswapV2Callee {
         );
 
         emit Burn(msg.sender, lendgine, params.shares, liquidity);
+    }
+
+    struct SkimParams {
+        address base;
+        address speculative;
+        uint256 baseScaleFactor;
+        uint256 speculativeScaleFactor;
+        uint256 upperBound;
+        address recipient;
+    }
+
+    function skim(SkimParams calldata params) external payable {
+        address pair = LendgineAddress.computePairAddress(
+            factory,
+            params.base,
+            params.speculative,
+            params.baseScaleFactor,
+            params.speculativeScaleFactor,
+            params.upperBound
+        );
+
+        address recipient = params.recipient == address(0) ? address(this) : params.recipient;
+
+        Pair(pair).skim(recipient);
     }
 
     /*//////////////////////////////////////////////////////////////

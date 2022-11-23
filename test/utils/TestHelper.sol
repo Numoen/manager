@@ -16,7 +16,7 @@ import "forge-std/console2.sol";
 
 abstract contract TestHelper is Test, CallbackHelper {
     MockERC20 public immutable base;
-    MockERC20 public immutable speculative;
+    MockERC20 public speculative;
 
     uint256 public immutable upperBound = 5 ether;
 

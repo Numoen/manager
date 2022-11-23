@@ -1,12 +1,15 @@
 pragma solidity ^0.8.4;
 
 import { LendgineRouter } from "../src/LendgineRouter.sol";
+import { LiquidityManager } from "../src/LiquidityManager.sol";
+import { Payment } from "../src/Payment.sol";
 
 import { IUniswapV2Factory } from "../src/interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "../src/interfaces/IUniswapV2Pair.sol";
 import { NumoenLibrary } from "../src/libraries/NumoenLibrary.sol";
 
 import { TestHelper } from "./utils/TestHelper.sol";
+import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 
 import "forge-std/console2.sol";
 
@@ -29,13 +32,10 @@ contract LendgineRouterTest is TestHelper {
         uint256 borrowAmount = determineBorrowAmount(
             MathParams({ speculativeAmount: amount, upperBound: upperBound, price: price, slippageBps: slippageBps })
         );
-        speculative.mint(spender, amount);
+        vm.deal(spender, amount);
 
         vm.prank(spender);
-        speculative.approve(address(lendgineRouter), amount);
-
-        vm.prank(spender);
-        (_lendgine, _shares) = lendgineRouter.mint(
+        (_lendgine, _shares) = lendgineRouter.mint{ value: amount }(
             LendgineRouter.MintParams({
                 base: address(base),
                 speculative: address(speculative),
@@ -51,7 +51,38 @@ contract LendgineRouterTest is TestHelper {
         );
     }
 
+    function mintLiqETH(
+        address spender,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 liquidity,
+        uint256 deadline
+    ) public returns (uint256 tokenID) {
+        base.mint(spender, amount0);
+        vm.deal(spender, amount1);
+
+        vm.prank(spender);
+        base.approve(address(liquidityManager), amount0);
+
+        vm.prank(spender);
+        (tokenID) = liquidityManager.mint{ value: amount1 }(
+            LiquidityManager.MintParams({
+                base: address(base),
+                speculative: address(speculative),
+                baseScaleFactor: 18,
+                speculativeScaleFactor: 18,
+                upperBound: upperBound,
+                amount0Min: amount0,
+                amount1Min: amount1,
+                liquidity: liquidity,
+                recipient: spender,
+                deadline: deadline
+            })
+        );
+    }
+
     function setUp() public {
+        speculative = MockERC20(address(weth));
         _setUp();
 
         lendgineRouter = new LendgineRouter(address(factory), address(uniFactory), address(weth));
@@ -59,12 +90,14 @@ contract LendgineRouterTest is TestHelper {
         address _uniPair = uniFactory.createPair(address(base), address(speculative));
         uniPair = IUniswapV2Pair(_uniPair);
         base.mint(_uniPair, 10000 ether);
-        speculative.mint(_uniPair, 10000 ether);
+        vm.deal(address(this), 10000 ether);
+        weth.deposit{ value: 10000 ether }();
+        weth.transfer(_uniPair, 10000 ether);
         uniPair.mint(address(this));
     }
 
     function testMintBasic() public {
-        mintLiq(address(this), 100 ether, 800 ether, 100 ether, block.timestamp);
+        mintLiqETH(address(this), 100 ether, 800 ether, 100 ether, block.timestamp);
         (address _lendgine, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
@@ -80,7 +113,7 @@ contract LendgineRouterTest is TestHelper {
     }
 
     function testBurnDDos() public {
-        mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
+        mintLiqETH(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
         (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
@@ -90,7 +123,7 @@ contract LendgineRouterTest is TestHelper {
 
         base.mint(address(pair), 1 ether);
         vm.prank(cuh);
-        bytes[] memory data = new bytes[](2);
+        bytes[] memory data = new bytes[](4);
 
         data[0] = abi.encodeWithSelector(
             LendgineRouter.skim.selector,
@@ -113,19 +146,25 @@ contract LendgineRouterTest is TestHelper {
                 upperBound: upperBound,
                 liquidityMax: liquidity,
                 shares: _shares,
-                recipient: cuh,
+                recipient: address(lendgineRouter),
                 deadline: block.timestamp
             })
         );
+        data[2] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 10, cuh);
+        data[3] = abi.encodeWithSelector(Payment.refundETH.selector);
 
         lendgineRouter.multicall(data);
 
         assertEq(lendgine.balanceOf(cuh), 0);
         assertEq(pair.buffer(), 0);
+        assertEq(base.balanceOf(address(lendgineRouter)), 0);
+        assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
+        assertEq(speculative.balanceOf(cuh), 0);
+        assertEq(address(lendgineRouter).balance, 0);
     }
 
     function testBurnBasic() public {
-        mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
+        mintLiqETH(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
         (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
@@ -133,8 +172,10 @@ contract LendgineRouterTest is TestHelper {
         vm.prank(cuh);
         lendgine.approve(address(lendgineRouter), _shares);
 
-        vm.prank(cuh);
-        address _lendgine = lendgineRouter.burn(
+        bytes[] memory data = new bytes[](3);
+
+        data[0] = abi.encodeWithSelector(
+            LendgineRouter.burn.selector,
             LendgineRouter.BurnParams({
                 base: address(base),
                 speculative: address(speculative),
@@ -143,21 +184,25 @@ contract LendgineRouterTest is TestHelper {
                 upperBound: upperBound,
                 liquidityMax: liquidity,
                 shares: _shares,
-                recipient: cuh,
+                recipient: address(lendgineRouter),
                 deadline: block.timestamp
             })
         );
 
-        // assertEq(_amountS, 1 ether);
-        // assertEq(_amountB, 8 ether);
+        data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 10, cuh);
+        data[2] = abi.encodeWithSelector(Payment.refundETH.selector);
+        vm.prank(cuh);
+        lendgineRouter.multicall(data);
 
-        assertEq(address(lendgine), _lendgine);
+        // assertEq(address(lendgine), _lendgine);
         // assertEq(lendgine.balanceOf(cuh), 0);
 
         // assertEq(pair.totalSupply(), 10 ether);
         assertEq(pair.buffer(), 0);
 
-        // assertEq(base.balanceOf(address(lendgineRouter)), 0);
-        // assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
+        assertEq(base.balanceOf(address(lendgineRouter)), 0);
+        assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
+        assertEq(speculative.balanceOf(cuh), 0);
+        assertEq(address(lendgineRouter).balance, 0);
     }
 }
