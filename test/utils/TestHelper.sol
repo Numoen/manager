@@ -11,20 +11,22 @@ import { Pair } from "numoen-core/Pair.sol";
 
 import { LiquidityManager } from "../../src/LiquidityManager.sol";
 import { LendgineAddress } from "../../src/libraries/LendgineAddress.sol";
+import { IWETH9 } from "../../src/interfaces/IWETH9.sol";
 import "forge-std/console2.sol";
 
 abstract contract TestHelper is Test, CallbackHelper {
     MockERC20 public immutable base;
-    MockERC20 public immutable speculative;
+    MockERC20 public speculative;
 
     uint256 public immutable upperBound = 5 ether;
 
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public immutable factory = Factory(0x60BA0a7DCd2caa3Eb171f0A8692A37d34900E247);
+    Factory public factory = Factory(0x8780898Cf5f3E3b20714b0AAEA198817b1cA481d);
     Lendgine public lendgine;
     Pair public pair;
+    IWETH9 public weth = IWETH9(0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6);
 
     LendgineAddress.LendgineKey public key;
 
@@ -55,8 +57,7 @@ abstract contract TestHelper is Test, CallbackHelper {
         lendgine = Lendgine(_lendgine);
         pair = Pair(_pair);
 
-        liquidityManager = new LiquidityManager(address(factory));
-        console2.log(Lendgine(0x24aceAE438C60DD6ba937B27345531115a099048).totalLiquidityBorrowed());
+        liquidityManager = new LiquidityManager(address(factory), address(weth));
     }
 
     function mintLiq(
