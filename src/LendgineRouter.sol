@@ -17,8 +17,6 @@ import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
 import { Payment } from "./Payment.sol";
 import { Multicall } from "./Multicall.sol";
 
-import "forge-std/console2.sol";
-
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
 contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
