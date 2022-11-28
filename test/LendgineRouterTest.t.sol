@@ -127,6 +127,7 @@ contract LendgineRouterTest is TestHelper {
     function testBurnBasic() public {
         mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
         (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
+        uint256 kBefore = base.balanceOf(address(uniPair)) * speculative.balanceOf(address(uniPair));
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
 
@@ -159,5 +160,7 @@ contract LendgineRouterTest is TestHelper {
 
         // assertEq(base.balanceOf(address(lendgineRouter)), 0);
         // assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
+        uint256 kAfter = base.balanceOf(address(uniPair)) * speculative.balanceOf(address(uniPair));
+        console2.log(kAfter - kBefore);
     }
 }

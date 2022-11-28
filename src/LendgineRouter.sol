@@ -17,6 +17,8 @@ import { IUniswapV2Callee } from "./interfaces/IUniswapV2Callee.sol";
 import { Payment } from "./Payment.sol";
 import { Multicall } from "./Multicall.sol";
 
+import "forge-std/console2.sol";
+
 /// @notice Facilitates mint and burning Numoen Positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LendgineRouter.sol)
 contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
@@ -250,8 +252,6 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
             (uint256 u0, uint256 u1, ) = IUniswapV2Pair(uniPair).getReserves();
             repayAmount = determineRepayAmount(
                 RepayParams({
-                    liquidity: params.liquidity,
-                    upperBound: params.upperBound,
                     r0: r0,
                     r1: r1,
                     u0: params.base < params.speculative ? u0 : u1,
@@ -311,8 +311,6 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
     //////////////////////////////////////////////////////////////*/
 
     struct RepayParams {
-        uint256 liquidity;
-        uint256 upperBound;
         uint256 r0;
         uint256 r1;
         uint256 u0;
@@ -320,13 +318,12 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
     }
 
     function determineRepayAmount(RepayParams memory params) internal pure returns (uint256) {
-        uint256 numerator = 1000 *
-            (PRBMathUD60x18.mul(params.u0, params.r1) +
-                PRBMathUD60x18.mul(params.u1, params.r0) +
-                PRBMathUD60x18.mul(params.r0, params.r1));
-        uint256 denominator = 997 * (params.u0 - params.r0);
+        uint256 a = params.u0 * params.u1 * 1000;
+        uint256 b = params.u0 - params.r0;
+        uint256 c = 1000 * params.r1;
+        uint256 d = 1000 * params.u1;
 
-        return PRBMathUD60x18.div(numerator, denominator);
+        return (((a / b) + c - d) / 997) + 1;
     }
 
     function getSOut(
