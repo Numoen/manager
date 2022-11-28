@@ -85,7 +85,7 @@ contract LiquidityManager is Multicall, Payment {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(address _factory, address _WETH9) Payment(_WETH9) {
+    constructor(address _factory, address _weth9) Payment(_weth9) {
         factory = _factory;
     }
 
@@ -106,6 +106,7 @@ contract LiquidityManager is Multicall, Payment {
         uint256 deadline;
     }
 
+    /// @notice Mint a new liquidity provider position by depositing to the underlying lendgine
     function mint(MintParams calldata params)
         external
         payable
@@ -179,6 +180,7 @@ contract LiquidityManager is Multicall, Payment {
         uint256 deadline;
     }
 
+    /// @notice Increase the size of an already existing liquidity position
     function increaseLiquidity(IncreaseLiquidityParams calldata params)
         external
         payable
@@ -245,6 +247,7 @@ contract LiquidityManager is Multicall, Payment {
         uint256 deadline;
     }
 
+    /// @notice Decrease the size of an already existing liquidity position
     function decreaseLiquidity(DecreaseLiquidityParams calldata params)
         external
         payable
@@ -299,6 +302,7 @@ contract LiquidityManager is Multicall, Payment {
         uint256 amountRequested;
     }
 
+    /// @notice Collect interest owed to a liquidity provider position
     function collect(CollectParams calldata params) external payable returns (uint256 amount) {
         Position storage position = _positions[params.tokenID];
 
@@ -344,6 +348,7 @@ contract LiquidityManager is Multicall, Payment {
         address recipient;
     }
 
+    /// @notice Collects any funds that have been donated to the corresponding pair contract
     function skim(SkimParams calldata params) external payable {
         address pair = LendgineAddress.computePairAddress(
             factory,
@@ -378,6 +383,7 @@ contract LiquidityManager is Multicall, Payment {
                                 VIEW
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Return information for a given position
     function getPosition(uint256 tokenID)
         external
         view

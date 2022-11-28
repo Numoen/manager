@@ -6,11 +6,14 @@ import { IWETH9 } from "./interfaces/IWETH9.sol";
 
 import { SafeTransferLib } from "./libraries/SafeTransferLib.sol";
 
+/// @title   Payment contract
+/// @author  https://github.com/Uniswap/v3-periphery/blob/main/contracts/base/PeripheryPayments.sol
+/// @notice  Functions to ease deposits and withdrawals of ETH
 abstract contract Payment {
     address public immutable WETH9;
 
-    constructor(address _WETH9) {
-        WETH9 = _WETH9;
+    constructor(address _weth9) {
+        WETH9 = _weth9;
     }
 
     receive() external payable {

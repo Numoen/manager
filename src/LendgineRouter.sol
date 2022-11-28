@@ -155,6 +155,7 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
         uint256 deadline;
     }
 
+    /// @notice Mints an option using a flash loan and swapping through an external liquidity pool
     function mint(MintParams calldata params)
         external
         payable
@@ -205,6 +206,7 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
         uint256 deadline;
     }
 
+    /// @notice Burns an option position by borrowing funds, paying back liquidity and unlocking collateral
     function burn(BurnParams calldata params)
         external
         payable
@@ -288,6 +290,7 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
         address recipient;
     }
 
+    /// @notice Collects any funds that have been donated to the corresponding pair contract
     function skim(SkimParams calldata params) external payable {
         address pair = LendgineAddress.computePairAddress(
             factory,
