@@ -144,8 +144,8 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidityMax: liquidity,
-                shares: _shares,
+                liquidity: liquidity,
+                sharesMax: _shares,
                 recipient: address(lendgineRouter),
                 deadline: block.timestamp
             })
@@ -166,13 +166,14 @@ contract LendgineRouterTest is TestHelper {
     function testBurnBasic() public {
         mintLiqETH(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
         (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
+        console2.log(address(lendgineRouter).balance);
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
 
         vm.prank(cuh);
         lendgine.approve(address(lendgineRouter), _shares);
 
-        bytes[] memory data = new bytes[](3);
+        bytes[] memory data = new bytes[](1);
 
         data[0] = abi.encodeWithSelector(
             LendgineRouter.burn.selector,
@@ -182,15 +183,14 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidityMax: liquidity,
-                shares: _shares,
+                liquidity: liquidity,
+                sharesMax: _shares,
                 recipient: address(lendgineRouter),
                 deadline: block.timestamp
             })
         );
 
-        data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 10, cuh);
-        data[2] = abi.encodeWithSelector(Payment.refundETH.selector);
+        // data[1] = abi.encodeWithSelector(Payment.unwrapWETH9.selector, 10, cuh);
         vm.prank(cuh);
         lendgineRouter.multicall(data);
 

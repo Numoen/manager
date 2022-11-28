@@ -111,8 +111,8 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidityMax: liquidity,
-                shares: _shares,
+                liquidity: liquidity,
+                sharesMax: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })
@@ -141,8 +141,8 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidityMax: liquidity,
-                shares: _shares,
+                liquidity: liquidity,
+                sharesMax: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })
