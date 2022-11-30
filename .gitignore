@@ -9,6 +9,8 @@
 **/node_modules
 **/out
 
+localScript/
+
 # files
 *.env
 *.log

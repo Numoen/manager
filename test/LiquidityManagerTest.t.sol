@@ -23,7 +23,7 @@ contract LiquidityManagerTest is Test, CallbackHelper {
     address public immutable cuh;
     address public immutable dennis;
 
-    Factory public factory = Factory(0x8780898Cf5f3E3b20714b0AAEA198817b1cA481d);
+    Factory public factory = Factory(vm.envAddress("FACTORY"));
     Lendgine public lendgine;
     Pair public pair;
     IWETH9 public weth = IWETH9(0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6);
