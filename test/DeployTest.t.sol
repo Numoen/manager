@@ -3,7 +3,7 @@ pragma solidity ^0.8.4;
 import { Factory } from "numoen-core/Factory.sol";
 import { Lendgine } from "numoen-core/Lendgine.sol";
 import { Pair } from "numoen-core/Pair.sol";
-import { LendgineAddress } from "numoen-core/libraries/LendgineAddress.sol";
+import { LendgineAddress } from "../src/libraries/LendgineAddress.sol";
 
 import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 
@@ -16,7 +16,7 @@ contract DeployTest is Test {
 
     uint256 public immutable upperBound = 5 ether;
 
-    Factory public factory;
+    Factory public factory = Factory(vm.envAddress("FACTORY"));
     Lendgine public lendgine;
     Pair public pair;
 
@@ -26,7 +26,6 @@ contract DeployTest is Test {
     }
 
     function testDeploy() public {
-        factory = new Factory();
         (address _lendgine, address _pair) = factory.createLendgine(
             address(base),
             address(speculative),
