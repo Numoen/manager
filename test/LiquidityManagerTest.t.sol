@@ -68,8 +68,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0Min: amount0,
-                amount1Min: amount1,
+                amount0Max: amount0,
+                amount1Max: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline
@@ -171,14 +171,49 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp
             })
         );
 
         assertPosition(tokenID, cuh, key, 2 ether, 0, 0);
+    }
+
+    function testIncreaseEmpty() public {
+        uint256 tokenID = mintLiq(cuh, 1 ether, 8 ether, 1 ether, block.timestamp);
+
+        vm.prank(cuh);
+        liquidityManager.decreaseLiquidity(
+            LiquidityManager.DecreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0Min: 1 ether,
+                amount1Min: 8 ether,
+                liquidity: 1 ether,
+                recipient: cuh,
+                deadline: block.timestamp
+            })
+        );
+
+        vm.prank(cuh);
+        base.approve(address(liquidityManager), 1 ether);
+
+        vm.prank(cuh);
+        speculative.approve(address(liquidityManager), 8 ether);
+
+        vm.prank(cuh);
+        liquidityManager.increaseLiquidity(
+            LiquidityManager.IncreaseLiquidityParams({
+                tokenID: tokenID,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
+                liquidity: 1 ether,
+                deadline: block.timestamp
+            })
+        );
+
+        assertPosition(tokenID, cuh, key, 1 ether, 0, 0);
     }
 
     function testIncreaseInterest() public {
@@ -203,8 +238,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })
@@ -334,8 +369,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: 2,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })
@@ -361,8 +396,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })
@@ -470,8 +505,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             LiquidityManager.increaseLiquidity.selector,
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp
             })

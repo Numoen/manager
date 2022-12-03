@@ -5,6 +5,7 @@ import { LendgineRouter } from "../src/LendgineRouter.sol";
 import { IUniswapV2Factory } from "../src/interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "../src/interfaces/IUniswapV2Pair.sol";
 import { NumoenLibrary } from "../src/libraries/NumoenLibrary.sol";
+import { PRBMath } from "prb-math/PRBMath.sol";
 
 import { TestHelper } from "./utils/TestHelper.sol";
 
@@ -85,6 +86,10 @@ contract LendgineRouterTest is TestHelper {
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
 
+        (uint256 p0, uint256 p1) = (pair.reserve0(), pair.reserve1());
+        uint256 r0 = PRBMath.mulDiv(p0, liquidity, pair.totalSupply());
+        uint256 r1 = PRBMath.mulDiv(p1, liquidity, pair.totalSupply());
+
         vm.prank(cuh);
         lendgine.approve(address(lendgineRouter), _shares);
 
@@ -111,8 +116,9 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidity: liquidity,
-                sharesMax: _shares,
+                amount0Max: r0,
+                amount1Max: r1,
+                shares: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })
@@ -131,6 +137,10 @@ contract LendgineRouterTest is TestHelper {
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
 
+        (uint256 p0, uint256 p1) = (pair.reserve0(), pair.reserve1());
+        uint256 r0 = PRBMath.mulDiv(p0, liquidity, pair.totalSupply());
+        uint256 r1 = PRBMath.mulDiv(p1, liquidity, pair.totalSupply());
+
         vm.prank(cuh);
         lendgine.approve(address(lendgineRouter), _shares);
 
@@ -142,8 +152,9 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidity: liquidity,
-                sharesMax: _shares,
+                amount0Max: r0,
+                amount1Max: r1,
+                shares: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })

@@ -6,6 +6,12 @@ import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 /// @notice Helper functions for interacting with Numoen Core
 /// @author Kyle Scott (https://github.com/Numoen/manager/blob/master/src/libraries/NumoenLibrary.sol)
 library NumoenLibrary {
+    // TODO: remove these two functions
+
+    // TODO: add back in the speculative swap functions
+
+    // TODO: do we need to add 1 to any of the swap functions
+
     /// @notice Calculates the reserves of a pair given a price
     /// @param price Exchange rate measured in base / speculative scaled by 1 ether
     /// @param liquidity Amount of liquidity shares

@@ -68,8 +68,8 @@ contract NumoenLibraryTest is Test {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0Min: amount0,
-                amount1Min: amount1,
+                amount0Max: amount0,
+                amount1Max: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline

@@ -66,8 +66,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0Min: amount0,
-                amount1Min: amount1,
+                amount0Max: amount0,
+                amount1Max: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline
@@ -170,8 +170,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity{ value: 8 ether }(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp
             })
@@ -203,8 +203,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
         liquidityManager.increaseLiquidity{ value: 8 ether }(
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp + 365 days
             })
@@ -367,8 +367,8 @@ contract LiquidityManagerTest is Test, CallbackHelper {
             LiquidityManager.increaseLiquidity.selector,
             LiquidityManager.IncreaseLiquidityParams({
                 tokenID: tokenID,
-                amount0Min: 1 ether,
-                amount1Min: 8 ether,
+                amount0Max: 1 ether,
+                amount1Max: 8 ether,
                 liquidity: 1 ether,
                 deadline: block.timestamp
             })

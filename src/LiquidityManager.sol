@@ -99,8 +99,8 @@ contract LiquidityManager is Multicall, Payment {
         uint256 baseScaleFactor;
         uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint256 amount0Min;
-        uint256 amount1Min;
+        uint256 amount0Max;
+        uint256 amount1Max;
         uint256 liquidity;
         address recipient;
         uint256 deadline;
@@ -144,13 +144,14 @@ contract LiquidityManager is Multicall, Payment {
         uint256 amount0;
         uint256 amount1;
         if (_totalSupply == 0) {
-            amount0 = params.amount0Min;
-            amount1 = params.amount1Min;
+            amount0 = params.amount0Max;
+            amount1 = params.amount1Max;
         } else {
+            // TODO: round up
             amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
             amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
         }
-        if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
+        if (amount0 > params.amount0Max || amount1 > params.amount1Max) revert SlippageError();
 
         pay(params.base, msg.sender, pair, amount0);
         pay(params.speculative, msg.sender, pair, amount1);
@@ -174,8 +175,8 @@ contract LiquidityManager is Multicall, Payment {
 
     struct IncreaseLiquidityParams {
         uint256 tokenID;
-        uint256 amount0Min;
-        uint256 amount1Min;
+        uint256 amount0Max;
+        uint256 amount1Max;
         uint256 liquidity;
         uint256 deadline;
     }
@@ -214,11 +215,15 @@ contract LiquidityManager is Multicall, Payment {
         uint256 _totalSupply = Pair(pair).totalSupply();
         uint256 amount0;
         uint256 amount1;
-
-        amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
-        amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
-
-        if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
+        if (_totalSupply == 0) {
+            amount0 = params.amount0Max;
+            amount1 = params.amount1Max;
+        } else {
+            // TODO: round up
+            amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
+            amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
+        }
+        if (amount0 > params.amount0Max || amount1 > params.amount1Max) revert SlippageError();
 
         pay(lendgineKey.base, msg.sender, pair, amount0);
         pay(lendgineKey.speculative, msg.sender, pair, amount1);

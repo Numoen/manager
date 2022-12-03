@@ -200,8 +200,9 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
         uint256 baseScaleFactor;
         uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint256 sharesMax;
-        uint256 liquidity;
+        uint256 shares;
+        uint256 amount0Max;
+        uint256 amount1Max;
         address recipient;
         uint256 deadline;
     }
@@ -231,17 +232,22 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
         );
 
         Lendgine(lendgine).accrueInterest();
-        uint256 shares = Lendgine(lendgine).convertLiquidityToShare(params.liquidity);
-        if (shares > params.sharesMax) revert SlippageError();
+        uint256 liquidity = Lendgine(lendgine).convertShareToLiquidity(params.shares);
 
         uint256 r0;
         uint256 r1;
         {
             (uint256 p0, uint256 p1) = (Pair(pair).reserve0(), Pair(pair).reserve1());
             uint256 _totalSupply = Pair(pair).totalSupply();
-
-            r0 = PRBMath.mulDiv(p0, params.liquidity, _totalSupply);
-            r1 = PRBMath.mulDiv(p1, params.liquidity, _totalSupply);
+            if (_totalSupply == 0) {
+                r0 = params.amount0Max;
+                r1 = params.amount1Max;
+            } else {
+                // TODO: round up
+                r0 = PRBMath.mulDiv(p0, liquidity, _totalSupply);
+                r1 = PRBMath.mulDiv(p1, liquidity, _totalSupply);
+            }
+            if (r0 > params.amount0Max || r1 > params.amount1Max) revert SlippageError();
         }
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);
@@ -258,7 +264,7 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
             );
         }
 
-        Lendgine(lendgine).transferFrom(msg.sender, lendgine, shares);
+        Lendgine(lendgine).transferFrom(msg.sender, lendgine, params.shares);
         IUniswapV2Pair(uniPair).swap(
             params.base < params.speculative ? r0 : r1,
             params.base < params.speculative ? r1 : r0,
@@ -269,14 +275,14 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
                     pair: pair,
                     speculative: params.speculative,
                     base: params.base,
-                    liquidity: params.liquidity,
+                    liquidity: liquidity,
                     repayAmount: repayAmount,
                     recipient: params.recipient
                 })
             )
         );
 
-        emit Burn(msg.sender, lendgine, shares, params.liquidity);
+        emit Burn(msg.sender, lendgine, params.shares, liquidity);
     }
 
     struct SkimParams {
