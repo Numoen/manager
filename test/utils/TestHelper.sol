@@ -46,6 +46,26 @@ abstract contract TestHelper is Test, CallbackHelper {
         dennis = mkaddr("dennis");
     }
 
+    function priceToReserves(
+        uint256 price,
+        uint256 liquidity,
+        uint256 upperBound
+    ) internal pure returns (uint256 r0, uint256 r1) {
+        uint256 scale0 = PRBMathUD60x18.powu(price, 2);
+        uint256 scale1 = 2 * (upperBound - price);
+
+        return (PRBMathUD60x18.mul(scale0, liquidity), PRBMathUD60x18.mul(scale1, liquidity));
+    }
+
+    function reservesToPrice(
+        uint256 r1,
+        uint256 liquidity,
+        uint256 upperBound
+    ) internal pure returns (uint256 price) {
+        uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
+        return upperBound - scale1 / 2;
+    }
+
     function _setUp() public {
         (address _lendgine, address _pair) = factory.createLendgine(
             address(base),
