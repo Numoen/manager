@@ -12,6 +12,7 @@ import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { IWETH9 } from "../src/interfaces/IWETH9.sol";
 
 import { Test } from "forge-std/Test.sol";
+import { priceToReserves } from "./utils/TestHelper.sol";
 import "forge-std/console2.sol";
 
 contract NumoenLibraryTest is Test {
@@ -68,8 +69,8 @@ contract NumoenLibraryTest is Test {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                amount0Max: amount0,
-                amount1Max: amount1,
+                amount0Min: amount0,
+                amount1Min: amount1,
                 liquidity: liquidity,
                 recipient: spender,
                 deadline: deadline
@@ -164,7 +165,7 @@ contract NumoenLibraryTest is Test {
     function testBaseOutScaleUp() public {
         uint256 liquidity = 100 ether;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSIn = 1 ether;

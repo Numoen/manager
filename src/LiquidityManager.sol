@@ -13,6 +13,8 @@ import { Pair } from "numoen-core/Pair.sol";
 import { PRBMathUD60x18 } from "prb-math/PRBMathUD60x18.sol";
 import { PRBMath } from "prb-math/PRBMath.sol";
 
+import "forge-std/console2.sol";
+
 /// @notice Wraps Numoen liquidity positions
 /// @author Kyle Scott (https://github.com/numoen/manager/blob/master/src/LiquidityManager.sol)
 /// @author Modified from Uniswap
@@ -99,8 +101,8 @@ contract LiquidityManager is Multicall, Payment {
         uint256 baseScaleFactor;
         uint256 speculativeScaleFactor;
         uint256 upperBound;
-        uint256 amount0Max;
-        uint256 amount1Max;
+        uint256 amount0Min;
+        uint256 amount1Min;
         uint256 liquidity;
         address recipient;
         uint256 deadline;
@@ -144,14 +146,13 @@ contract LiquidityManager is Multicall, Payment {
         uint256 amount0;
         uint256 amount1;
         if (_totalSupply == 0) {
-            amount0 = params.amount0Max;
-            amount1 = params.amount1Max;
+            amount0 = params.amount0Min;
+            amount1 = params.amount1Min;
         } else {
-            // TODO: round up
-            amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
-            amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
+            amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply) + 1;
+            amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply) + 1;
         }
-        if (amount0 > params.amount0Max || amount1 > params.amount1Max) revert SlippageError();
+        if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
 
         pay(params.base, msg.sender, pair, amount0);
         pay(params.speculative, msg.sender, pair, amount1);
@@ -175,8 +176,8 @@ contract LiquidityManager is Multicall, Payment {
 
     struct IncreaseLiquidityParams {
         uint256 tokenID;
-        uint256 amount0Max;
-        uint256 amount1Max;
+        uint256 amount0Min;
+        uint256 amount1Min;
         uint256 liquidity;
         uint256 deadline;
     }
@@ -216,14 +217,13 @@ contract LiquidityManager is Multicall, Payment {
         uint256 amount0;
         uint256 amount1;
         if (_totalSupply == 0) {
-            amount0 = params.amount0Max;
-            amount1 = params.amount1Max;
+            amount0 = params.amount0Min;
+            amount1 = params.amount1Min;
         } else {
-            // TODO: round up
-            amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply);
-            amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply);
+            amount0 = PRBMath.mulDiv(r0, params.liquidity, _totalSupply) + 1;
+            amount1 = PRBMath.mulDiv(r1, params.liquidity, _totalSupply) + 1;
         }
-        if (amount0 > params.amount0Max || amount1 > params.amount1Max) revert SlippageError();
+        if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageError();
 
         pay(lendgineKey.base, msg.sender, pair, amount0);
         pay(lendgineKey.speculative, msg.sender, pair, amount1);

@@ -201,8 +201,8 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
         uint256 speculativeScaleFactor;
         uint256 upperBound;
         uint256 shares;
-        uint256 amount0Max;
-        uint256 amount1Max;
+        uint256 amount0Min;
+        uint256 amount1Min;
         address recipient;
         uint256 deadline;
     }
@@ -240,14 +240,13 @@ contract LendgineRouter is Multicall, Payment, IMintCallback, IUniswapV2Callee {
             (uint256 p0, uint256 p1) = (Pair(pair).reserve0(), Pair(pair).reserve1());
             uint256 _totalSupply = Pair(pair).totalSupply();
             if (_totalSupply == 0) {
-                r0 = params.amount0Max;
-                r1 = params.amount1Max;
+                r0 = params.amount0Min;
+                r1 = params.amount1Min;
             } else {
-                // TODO: round up
-                r0 = PRBMath.mulDiv(p0, liquidity, _totalSupply);
-                r1 = PRBMath.mulDiv(p1, liquidity, _totalSupply);
+                r0 = PRBMath.mulDiv(p0, liquidity, _totalSupply) + 1;
+                r1 = PRBMath.mulDiv(p1, liquidity, _totalSupply) + 1;
             }
-            if (r0 > params.amount0Max || r1 > params.amount1Max) revert SlippageError();
+            if (r0 < params.amount0Min || r1 < params.amount1Min) revert SlippageError();
         }
 
         address uniPair = IUniswapV2Factory(uniFactory).getPair(params.base, params.speculative);

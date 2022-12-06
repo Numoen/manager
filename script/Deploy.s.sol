@@ -20,12 +20,12 @@ contract DeployScript is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(pk);
         create3.deploy(
-            keccak256("NumoenLiquidityManager01"),
+            keccak256("NumoenLiquidityManager1"),
             bytes.concat(type(LiquidityManager).creationCode, abi.encode(factory, weth))
         );
 
         create3.deploy(
-            keccak256("NumoenLendgineRouter01"),
+            keccak256("NumoenLendgineRouter1"),
             bytes.concat(type(LendgineRouter).creationCode, abi.encode(factory, uniFactory, weth))
         );
         vm.stopBroadcast();
