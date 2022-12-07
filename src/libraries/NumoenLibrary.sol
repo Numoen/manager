@@ -16,16 +16,18 @@ library NumoenLibrary {
         uint256 amountSOut,
         uint256 r1,
         uint256 liquidity,
-        uint256 upperBound
+        uint256 upperBound,
+        uint256 baseScaleFactor,
+        uint256 speculativeScaleFactor
     ) internal pure returns (uint256 amountBIn) {
-        uint256 scaleSOut = PRBMathUD60x18.div(amountSOut, liquidity);
-        uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
+        uint256 scaleSOut = PRBMathUD60x18.div(PRBMathUD60x18.div(amountSOut, liquidity), 10**speculativeScaleFactor);
+        uint256 scale1 = PRBMathUD60x18.div(PRBMathUD60x18.div(r1, liquidity), 10**speculativeScaleFactor);
 
         uint256 a = PRBMathUD60x18.mul(scaleSOut, upperBound);
         uint256 b = PRBMathUD60x18.powu(scaleSOut, 2) / 4;
         uint256 c = PRBMathUD60x18.mul(scaleSOut, scale1) / 2;
 
-        amountBIn = PRBMathUD60x18.mul(a + b - c, liquidity);
+        amountBIn = PRBMathUD60x18.mul(PRBMathUD60x18.mul(a + b - c, liquidity) + 1, 10**baseScaleFactor);
     }
 
     /// @notice Calculates the amount of base tokens out for a given amount of speculative tokens to be sold
@@ -38,15 +40,17 @@ library NumoenLibrary {
         uint256 amountSIn,
         uint256 r1,
         uint256 liquidity,
-        uint256 upperBound
+        uint256 upperBound,
+        uint256 baseScaleFactor,
+        uint256 speculativeScaleFactor
     ) internal pure returns (uint256 amountBOut) {
-        uint256 scaleSIn = PRBMathUD60x18.div(amountSIn, liquidity);
-        uint256 scale1 = PRBMathUD60x18.div(r1, liquidity);
+        uint256 scaleSIn = PRBMathUD60x18.div(PRBMathUD60x18.div(amountSIn, liquidity), 10**speculativeScaleFactor);
+        uint256 scale1 = PRBMathUD60x18.div(PRBMathUD60x18.div(r1, liquidity), 10**speculativeScaleFactor);
 
         uint256 a = PRBMathUD60x18.mul(scaleSIn, upperBound);
         uint256 b = PRBMathUD60x18.powu(scaleSIn, 2) / 4;
         uint256 c = PRBMathUD60x18.mul(scaleSIn, scale1) / 2;
 
-        amountBOut = PRBMathUD60x18.mul(a - b - c, liquidity);
+        amountBOut = PRBMathUD60x18.mul(PRBMathUD60x18.mul(a - b - c, liquidity), 10**baseScaleFactor);
     }
 }
