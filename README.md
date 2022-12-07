@@ -4,7 +4,7 @@ Contracts for managing Numoen perpetual options positions.
 
 ## Deployments
 
-`LiquidityManager` has been deployed to `0x0d9A2Eb3CBe96deeF3d6d62c5f3B620d5021941a` and `LendgineRouter` has been deployed to `0x27972ad7875BC17ADA5922C80db45B015DD554Df` on the following networks:
+`LiquidityManager` has been deployed to `0x7F5B1B07b91Ac3853891E6837143F77F38466D78` and `LendgineRouter` has been deployed to `0xE9c7FD75768c1104440590607bdCE5a7Be05333A` on the following networks:
 
 - Ethereum Goerli Testnet
 - Arbitrum Mainnet

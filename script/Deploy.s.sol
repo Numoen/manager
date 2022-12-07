@@ -15,17 +15,17 @@ contract DeployScript is Script {
         address factory = vm.envAddress("FACTORY");
 
         address uniFactory = 0xc35DADB65012eC5796536bD9864eD8773aBc74C4;
-        address weth = 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6;
+        address weth = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
 
         uint256 pk = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(pk);
         create3.deploy(
-            keccak256("NumoenLiquidityManager01"),
+            keccak256("LiquidityManager1"),
             bytes.concat(type(LiquidityManager).creationCode, abi.encode(factory, weth))
         );
 
         create3.deploy(
-            keccak256("NumoenLendgineRouter01"),
+            keccak256("LendgineRouter1"),
             bytes.concat(type(LendgineRouter).creationCode, abi.encode(factory, uniFactory, weth))
         );
         vm.stopBroadcast();

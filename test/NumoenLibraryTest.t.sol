@@ -12,6 +12,7 @@ import { MockERC20 } from "./utils/mocks/MockERC20.sol";
 import { IWETH9 } from "../src/interfaces/IWETH9.sol";
 
 import { Test } from "forge-std/Test.sol";
+import { priceToReserves } from "./utils/TestHelper.sol";
 import "forge-std/console2.sol";
 
 contract NumoenLibraryTest is Test {
@@ -91,123 +92,87 @@ contract NumoenLibraryTest is Test {
         liquidityManager = new LiquidityManager(address(factory), address(weth));
     }
 
-    function testPriceToReserves1() public {
-        uint256 liquidity = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(1 ether, liquidity, upperBound);
-        assertTrue(pair.verifyInvariant(r0, r1, liquidity));
-
-        assertEq(r0, 1 ether);
-        assertEq(r1, 8 ether);
-
-        uint256 price = NumoenLibrary.reservesToPrice(r1, liquidity, upperBound);
-        assertEq(price, 1 ether);
-    }
-
-    function testPriceToReservesScale() public {
-        uint256 liquidity = 10**9;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(1 ether, liquidity, upperBound);
-        assertTrue(pair.verifyInvariant(r0, r1, liquidity));
-
-        assertEq(r0, 10**9);
-        assertEq(r1, 8 * 10**9);
-
-        uint256 price = NumoenLibrary.reservesToPrice(r1, liquidity, upperBound);
-        assertEq(price, 1 ether);
-    }
-
-    function testPriceToReservesScaleUp() public {
-        uint256 liquidity = 100 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(1 ether, liquidity, upperBound);
-        assertTrue(pair.verifyInvariant(r0, r1, liquidity));
-
-        assertEq(r0, 100 ether);
-        assertEq(r1, 800 ether);
-
-        uint256 price = NumoenLibrary.reservesToPrice(r1, liquidity, upperBound);
-        assertEq(price, 1 ether);
-    }
-
     function testBaseIn() public {
         uint256 liquidity = 1 ether;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSOut = 0.1 ether;
-        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSOut, r1, liquidity, upperBound);
+        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSOut, r1, liquidity, upperBound, 18, 18);
         assertTrue(pair.verifyInvariant(r0 + amountBIn, r1 - amountSOut, liquidity));
 
-        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSOut, r1 - amountSOut, liquidity, upperBound);
-        assertEq(amountBIn, amountBOut);
+        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSOut, r1 - amountSOut, liquidity, upperBound, 18, 18);
+        assertEq(amountBIn - 1, amountBOut);
     }
 
     function testBaseInScale() public {
         uint256 liquidity = 10**9;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSOut = 10**9;
-        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSOut, r1, liquidity, upperBound);
+        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSOut, r1, liquidity, upperBound, 18, 18);
         assertTrue(pair.verifyInvariant(r0 + amountBIn, r1 - amountSOut, liquidity));
 
-        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSOut, r1 - amountSOut, liquidity, upperBound);
-        assertEq(amountBIn, amountBOut);
+        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSOut, r1 - amountSOut, liquidity, upperBound, 18, 18);
+        assertEq(amountBIn - 1, amountBOut);
     }
 
     function testBaseInScaleUp() public {
         uint256 liquidity = 100 ether;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSOut = 10**9;
-        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSOut, r1, liquidity, upperBound);
+        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSOut, r1, liquidity, upperBound, 18, 18);
         assertTrue(pair.verifyInvariant(r0 + amountBIn, r1 - amountSOut, liquidity));
 
-        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSOut, r1 - amountSOut, liquidity, upperBound);
-        assertEq(amountBIn, amountBOut);
+        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSOut, r1 - amountSOut, liquidity, upperBound, 18, 18);
+        assertEq(amountBIn - 1, amountBOut);
     }
 
     function testBaseOut() public {
         uint256 liquidity = 1 ether;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSIn = 0.1 ether;
-        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSIn, r1, liquidity, upperBound);
+        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSIn, r1, liquidity, upperBound, 18, 18);
         assertTrue(pair.verifyInvariant(r0 - amountBOut, r1 + amountSIn, liquidity));
 
-        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSIn, r1 + amountSIn, liquidity, upperBound);
-        assertEq(amountBIn, amountBOut);
+        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSIn, r1 + amountSIn, liquidity, upperBound, 18, 18);
+        assertEq(amountBIn - 1, amountBOut);
     }
 
     function testBaseOutScale() public {
         uint256 liquidity = 10**9;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSIn = 10**9;
-        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSIn, r1, liquidity, upperBound);
+        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSIn, r1, liquidity, upperBound, 18, 18);
         assertTrue(pair.verifyInvariant(r0 - amountBOut, r1 + amountSIn, liquidity));
 
-        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSIn, r1 + amountSIn, liquidity, upperBound);
-        assertEq(amountBIn, amountBOut);
+        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSIn, r1 + amountSIn, liquidity, upperBound, 18, 18);
+        assertEq(amountBIn - 1, amountBOut);
     }
 
     function testBaseOutScaleUp() public {
         uint256 liquidity = 100 ether;
         uint256 price = 1 ether;
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(price, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(price, liquidity, upperBound);
         assertTrue(pair.verifyInvariant(r0, r1, liquidity));
 
         uint256 amountSIn = 1 ether;
-        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSIn, r1, liquidity, upperBound);
+        uint256 amountBOut = NumoenLibrary.getBaseOut(amountSIn, r1, liquidity, upperBound, 18, 18);
         assertTrue(pair.verifyInvariant(r0 - amountBOut, r1 + amountSIn, liquidity));
 
-        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSIn, r1 + amountSIn, liquidity, upperBound);
-        assertEq(amountBIn, amountBOut);
+        uint256 amountBIn = NumoenLibrary.getBaseIn(amountSIn, r1 + amountSIn, liquidity, upperBound, 18, 18);
+        assertEq(amountBIn - 1, amountBOut);
     }
 }

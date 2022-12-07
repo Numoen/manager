@@ -5,8 +5,9 @@ import { LendgineRouter } from "../src/LendgineRouter.sol";
 import { IUniswapV2Factory } from "../src/interfaces/IUniswapV2Factory.sol";
 import { IUniswapV2Pair } from "../src/interfaces/IUniswapV2Pair.sol";
 import { NumoenLibrary } from "../src/libraries/NumoenLibrary.sol";
+import { PRBMath } from "prb-math/PRBMath.sol";
 
-import { TestHelper } from "./utils/TestHelper.sol";
+import { TestHelper, priceToReserves } from "./utils/TestHelper.sol";
 
 import "forge-std/console2.sol";
 
@@ -69,7 +70,7 @@ contract LendgineRouterTest is TestHelper {
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
         uint256 collateral = lendgine.convertLiquidityToAsset(liquidity);
-        (uint256 r0, uint256 r1) = NumoenLibrary.priceToReserves(1 ether, liquidity, upperBound);
+        (uint256 r0, uint256 r1) = priceToReserves(1 ether, liquidity, upperBound);
         uint256 valueDebt = r1 + r0;
 
         assertApproxEqRel(collateral - valueDebt, 10 ether, 1 * 10**16);
@@ -84,6 +85,10 @@ contract LendgineRouterTest is TestHelper {
         (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
+
+        (uint256 p0, uint256 p1) = (pair.reserve0(), pair.reserve1());
+        uint256 r0 = PRBMath.mulDiv(p0, liquidity, pair.totalSupply());
+        uint256 r1 = PRBMath.mulDiv(p1, liquidity, pair.totalSupply());
 
         vm.prank(cuh);
         lendgine.approve(address(lendgineRouter), _shares);
@@ -111,8 +116,9 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidity: liquidity,
-                sharesMax: _shares,
+                amount0Min: r0,
+                amount1Min: r1,
+                shares: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })
@@ -127,9 +133,12 @@ contract LendgineRouterTest is TestHelper {
     function testBurnBasic() public {
         mintLiq(address(this), 10 ether, 80 ether, 10 ether, block.timestamp);
         (, uint256 _shares) = mint(cuh, 1 ether, 1 ether, 100, block.timestamp);
-        uint256 kBefore = base.balanceOf(address(uniPair)) * speculative.balanceOf(address(uniPair));
 
         uint256 liquidity = lendgine.convertShareToLiquidity(_shares);
+
+        (uint256 p0, uint256 p1) = (pair.reserve0(), pair.reserve1());
+        uint256 r0 = PRBMath.mulDiv(p0, liquidity, pair.totalSupply());
+        uint256 r1 = PRBMath.mulDiv(p1, liquidity, pair.totalSupply());
 
         vm.prank(cuh);
         lendgine.approve(address(lendgineRouter), _shares);
@@ -142,8 +151,9 @@ contract LendgineRouterTest is TestHelper {
                 baseScaleFactor: 18,
                 speculativeScaleFactor: 18,
                 upperBound: upperBound,
-                liquidity: liquidity,
-                sharesMax: _shares,
+                amount0Min: r0,
+                amount1Min: r1,
+                shares: _shares,
                 recipient: cuh,
                 deadline: block.timestamp
             })
@@ -160,7 +170,5 @@ contract LendgineRouterTest is TestHelper {
 
         // assertEq(base.balanceOf(address(lendgineRouter)), 0);
         // assertEq(speculative.balanceOf(address(lendgineRouter)), 0);
-        uint256 kAfter = base.balanceOf(address(uniPair)) * speculative.balanceOf(address(uniPair));
-        console2.log(kAfter - kBefore);
     }
 }
